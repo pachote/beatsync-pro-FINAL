@@ -1,0 +1,115 @@
+"""
+BeatSync PRO - Face Detection Module
+Uses MediaPipe - NO TENSORFLOW - Works with RTX 5090
+"""
+
+import cv2
+import numpy as np
+from pathlib import Path
+import logging
+from typing import Dict, List, Optional
+import mediapipe as mp
+
+logger = logging.getLogger(__name__)
+
+class FaceDetector:
+    OUTER_LIP = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409]
+    INNER_LIP = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415]
+    
+    def __init__(self, model_path: str = None):
+        self.mp_face_detection = mp.solutions.face_detection
+        self.face_detection = self.mp_face_detection.FaceDetection(
+            model_selection=1, min_detection_confidence=0.5
+        )
+        self.mp_face_mesh = mp.solutions.face_mesh
+        self.face_mesh = self.mp_face_mesh.FaceMesh(
+            static_image_mode=True, max_num_faces=4,
+            min_detection_confidence=0.5, min_tracking_confidence=0.5
+        )
+        logger.info("Face Detector initialized (MediaPipe)")
+        print("Face Detector initialized (MediaPipe)")
+    
+    def analyze_video_clip(self, video_path: str, sample_frames: int = 5) -> Dict:
+        try:
+            video_path = Path(video_path)
+            if not video_path.exists():
+                return self._empty_result()
+            
+            cap = cv2.VideoCapture(str(video_path))
+            if not cap.isOpened():
+                return self._empty_result()
+            
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            if total_frames == 0:
+                cap.release()
+                return self._empty_result()
+            
+            face_detections = []
+            lip_landmarks_all = []
+            frame_indices = np.linspace(0, total_frames - 1, sample_frames, dtype=int)
+            
+            for frame_idx in frame_indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                ret, frame = cap.read()
+                if not ret:
+                    continue
+                
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                results = self.face_detection.process(rgb_frame)
+                
+                if results.detections:
+                    for detection in results.detections:
+                        bbox = detection.location_data.relative_bounding_box
+                        h, w = frame.shape[:2]
+                        face_detections.append({
+                            'confidence': detection.score[0],
+                            'frame': frame_idx,
+                            'region': {
+                                'x': int(bbox.xmin * w), 'y': int(bbox.ymin * h),
+                                'w': int(bbox.width * w), 'h': int(bbox.height * h)
+                            }
+                        })
+                
+                mesh_results = self.face_mesh.process(rgb_frame)
+                if mesh_results.multi_face_landmarks:
+                    for face_landmarks in mesh_results.multi_face_landmarks:
+                        h, w = frame.shape[:2]
+                        outer_lip = [(int(face_landmarks.landmark[i].x * w), 
+                                     int(face_landmarks.landmark[i].y * h)) for i in self.OUTER_LIP]
+                        inner_lip = [(int(face_landmarks.landmark[i].x * w), 
+                                     int(face_landmarks.landmark[i].y * h)) for i in self.INNER_LIP]
+                        lip_landmarks_all.append({'outer': outer_lip, 'inner': inner_lip, 'frame': frame_idx})
+            
+            cap.release()
+            
+            if not face_detections:
+                return self._empty_result()
+            
+            avg_confidence = sum(d['confidence'] for d in face_detections) / len(face_detections)
+            return {
+                'has_face': True, 'face_count': len(face_detections),
+                'gender': 'Unknown', 'lip_landmarks': lip_landmarks_all,
+                'confidence': float(avg_confidence), 'face_regions': face_detections
+            }
+        except Exception as e:
+            logger.error(f"Error analyzing {video_path}: {e}")
+            return self._empty_result()
+    
+    def _empty_result(self) -> Dict:
+        return {'has_face': False, 'face_count': 0, 'gender': 'Unknown',
+                'lip_landmarks': [], 'confidence': 0.0, 'face_regions': []}
+    
+    def batch_analyze_clips(self, video_paths: List[str]) -> Dict[str, Dict]:
+        results = {}
+        logger.info(f"[FACE DETECTION] Analyzing {len(video_paths)} clips...")
+        for i, video_path in enumerate(video_paths, 1):
+            logger.info(f"[FACE DETECTION] Processing {i}/{len(video_paths)}: {Path(video_path).name}")
+            results[video_path] = self.analyze_video_clip(video_path)
+        total_with_faces = sum(1 for r in results.values() if r['has_face'])
+        logger.info(f"[FACE DETECTION] Complete: {total_with_faces}/{len(video_paths)} clips have faces")
+        return results
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    detector = FaceDetector()
+    print("FaceDetector test: OK")

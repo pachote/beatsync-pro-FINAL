@@ -1,0 +1,309 @@
+﻿"""
+Timeline widget for BeatSync PRO - REMOVED REDUNDANT CONTROLS
+The TimelineWidget now only contains the tracks and acts as a receiver for controls
+from the MusicTab.
+"""
+
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSplitter
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPainter, QColor, QPen, QBrush
+
+
+# --- GLOBAL DEFAULT TRACK HEIGHT INCREASED TO 80px ---
+DEFAULT_TRACK_HEIGHT = 80 
+
+class TimelineTrack(QWidget):
+    """Individual timeline track."""
+    
+    def __init__(self, name="Track", color="#0084ff"):
+        super().__init__()
+        self.name = name
+        self.color = QColor(color)
+        # Use the new default height
+        self.track_height = DEFAULT_TRACK_HEIGHT
+        self.setMinimumHeight(self.track_height)
+        self.setMaximumHeight(self.track_height) # Fix track height on creation
+    
+    def set_height(self, height):
+        """Set track height."""
+        self.track_height = height
+        self.setMinimumHeight(height)
+        self.setMaximumHeight(height)
+        self.update()
+    
+    def paintEvent(self, event):
+        print(f"\n[PAINT] paintEvent called on instance: {id(self)} - Track: {self.track_name}")
+        print(f"[PAINT] Has video_clips: {hasattr(self, 'video_clips')}")
+        if hasattr(self, 'video_clips'):
+            print(f"[PAINT] video_clips count: {len(self.video_clips)}")
+        
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Fill with dark background matching the main window's timeline track color
+        painter.fillRect(self.rect(), QColor(20, 20, 20))
+        
+        # Draw track border
+        pen = QPen(QColor(60, 60, 60), 1)
+        painter.setPen(pen)
+        painter.drawRect(self.rect())
+        
+        # Draw track label
+        painter.setPen(QPen(QColor(200, 200, 200)))
+        painter.drawText(10, 20, self.name)
+        
+        # Draw colored track line (subdued color)
+        track_color = QColor(self.color)
+        track_color.setAlpha(100)  # Make it more transparent
+        painter.fillRect(5, 25, self.width() - 10, self.track_height - 30, track_color)
+        
+        # ⚠️ TEST: Draw red rectangle to verify paintEvent is working
+        painter.fillRect(50, 35, 100, 30, QColor(255, 0, 0))
+        print(f"[PAINT] Drew RED TEST RECTANGLE at (50, 35)")
+
+        # DRAW VIDEO CLIPS
+        if hasattr(self, 'video_clips') and self.video_clips:
+            timeline_width = self.width() - 20
+            timeline_start_x = 10
+            timeline_y = 30
+            clip_height = self.track_height - 40
+            
+            for clip in self.video_clips:
+                if hasattr(self, 'audio_duration') and self.audio_duration > 0:
+                    start_ratio = clip['start_time'] / self.audio_duration
+                    duration_ratio = clip['duration'] / self.audio_duration
+                    
+                    clip_x = timeline_start_x + (start_ratio * timeline_width)
+                    clip_width = duration_ratio * timeline_width
+                    
+                    painter.fillRect(int(clip_x), timeline_y, int(clip_width), clip_height, clip['color'])
+                    painter.setPen(QPen(QColor(255, 255, 255, 100), 1))
+                    painter.drawRect(int(clip_x), timeline_y, int(clip_width), clip_height)
+
+
+class TimelineWidget(QWidget):
+    """Main timeline widget that receives external control signals."""
+    
+    def __init__(self):
+        super().__init__()
+        self.tracks = []
+        self.init_ui()
+    
+    def init_ui(self):
+        """Initialize the UI by creating only the track container."""
+        # Main layout
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        # --- REDUNDANT CONTROL BAR REMOVED HERE ---
+
+        # Timeline tracks container
+        self.tracks_container = QWidget()
+        self.tracks_container.setStyleSheet("""
+            QWidget {
+                background-color: #141414;
+                border: 1px solid #2a2a2a;
+            }
+        """)
+        
+        tracks_layout = QVBoxLayout()
+        tracks_layout.setContentsMargins(0, 0, 0, 0)
+        tracks_layout.setSpacing(1)
+        
+        # Create default tracks
+        self.video_track = TimelineTrack("Vid 1 Track", "#3366cc")
+        self.audio_track = TimelineTrack("Aud 1 Track", "#0084ff")
+        
+        self.tracks.append(self.video_track)
+        self.tracks.append(self.audio_track)
+        
+        tracks_layout.addWidget(self.video_track)
+        tracks_layout.addWidget(self.audio_track)
+        tracks_layout.addStretch()
+        
+        self.tracks_container.setLayout(tracks_layout)
+        main_layout.addWidget(self.tracks_container)
+        
+        self.setLayout(main_layout)
+        
+        # Set overall widget style
+        self.setStyleSheet("""
+            TimelineWidget {
+                background-color: #0a0a0a;
+            }
+        """)
+        
+        print("[Timeline] Initialized (Controls Removed)")
+    
+    def on_height_changed(self, value):
+        """
+        Public slot connected from MusicTab (via main_window_modular.py).
+        This method is now the SOLE way to change track height.
+        """
+        for track in self.tracks:
+            track.set_height(value)
+        
+        # Adjust the container size to reflect the new track height if needed
+        self.tracks_container.adjustSize()
+        self.update()
+        print(f"[Timeline] Track height changed to {value}px (External Control)")
+
+    def set_beat_analysis(self, analysis):
+        """Placeholder for receiving beat analysis data."""
+        # This function is here to confirm the connection from MusicTab works
+        # and to be implemented later for visual beat markers on the timeline.
+        print(f"[Timeline] Received beat analysis data for {analysis.get('source_file', 'unknown file')}")
+
+    def populate_timeline(self, edit_plan, music_duration):
+        """
+        Display clips on timeline from AI Director's edit plan
+        
+        Args:
+            edit_plan: Dict with 'clips' array from Claude AI Director
+            music_duration: Total duration of the music track in seconds
+        """
+        from PySide6.QtGui import QColor
+        
+        print(f"\n🎬 POPULATING TIMELINE: {len(edit_plan.get('clips', []))} clips, {music_duration}s music")
+        
+        # Store clips data
+        print(f"\n[TRACK] populate_timeline called on instance: {id(self)} - {self.track_name}")
+        print(f"[TRACK] Received {len(edit_plan.get('clips', []))} clips, duration: {music_duration}s")
+        
+        self.video_clips = []
+        self.audio_duration = music_duration
+        
+        # Color mapping for different song sections
+        section_colors = {
+            'intro': QColor(100, 150, 255),      # Light blue
+            'verse': QColor(150, 255, 150),      # Light green
+            'chorus': QColor(255, 200, 100),     # Orange
+            'bridge': QColor(200, 150, 255),     # Purple
+            'drop': QColor(255, 100, 100),       # Red
+            'outro': QColor(150, 150, 150),      # Gray
+            'buildup': QColor(255, 255, 100),    # Yellow
+            'breakdown': QColor(100, 200, 200),  # Cyan
+        }
+        
+        # Process each clip from the edit plan
+        for i, clip_data in enumerate(edit_plan.get('clips', [])):
+            # Extract clip information
+            video_path = clip_data.get('video_path', '')
+            start_time = float(clip_data.get('start_time', 0))
+            clip_duration = float(clip_data.get('clip_duration', 0))
+            section = clip_data.get('song_section', 'unknown')
+            
+            # Get filename for display
+            filename = video_path.split('\\')[-1] if '\\' in video_path else video_path.split('/')[-1]
+            filename = filename[:20] + '...' if len(filename) > 20 else filename
+            
+            # Choose color based on section
+            color = section_colors.get(section.lower(), QColor(200, 200, 200))
+            
+            # Create clip data structure
+            clip = {
+                'start_time': start_time,
+                'duration': clip_duration,
+                'end_time': start_time + clip_duration,
+                'label': f"{i+1}: {filename}",
+                'color': color,
+                'section': section,
+                'video_path': video_path
+            }
+            
+            self.video_clips.append(clip)
+            
+            print(f"  📹 Clip {i+1}: {filename[:30]} at {start_time:.1f}s ({clip_duration:.1f}s) [{section}]")
+        
+        print(f"✅ Timeline populated: {len(self.video_clips)} video clips + {music_duration:.1f}s music")
+        
+        print(f"[TRACK] Calling self.update() to trigger repaint...")
+        self.update()
+        print(f"[TRACK] Update called. video_clips stored: {len(self.video_clips)}")# Trigger repaint to show clips
+        self.update()
+
+    def paintEvent(self, event):
+        print(f"\n[PAINT] paintEvent called on instance: {id(self)} - Track: {self.track_name}")
+        print(f"[PAINT] Has video_clips: {hasattr(self, 'video_clips')}")
+        if hasattr(self, 'video_clips'):
+            print(f"[PAINT] video_clips count: {len(self.video_clips)}")
+        
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Fill with dark background
+        painter.fillRect(self.rect(), QColor(20, 20, 20))
+        
+        # Draw track border
+        pen = QPen(QColor(60, 60, 60), 1)
+        painter.setPen(pen)
+        painter.drawRect(self.rect())
+        
+        # Draw track label
+        painter.setPen(QPen(QColor(200, 200, 200)))
+        painter.drawText(10, 20, self.name)
+        
+        # Draw colored track line (subdued color)
+        track_color = QColor(self.color)
+        track_color.setAlpha(100)
+        painter.fillRect(5, 25, self.width() - 10, self.track_height - 30, track_color)
+        
+        # ⚠️ TEST: Draw red rectangle to verify paintEvent is working
+        painter.fillRect(50, 35, 100, 30, QColor(255, 0, 0))
+        print(f"[PAINT] Drew RED TEST RECTANGLE at (50, 35)")
+
+        # DRAW VIDEO CLIPS
+        if hasattr(self, 'video_clips') and self.video_clips:
+            timeline_width = self.width() - 20
+            timeline_start_x = 10
+            timeline_y = 30
+            clip_height = self.track_height - 40
+            
+            for clip in self.video_clips:
+                if hasattr(self, 'audio_duration') and self.audio_duration > 0:
+                    start_ratio = clip['start_time'] / self.audio_duration
+                    duration_ratio = clip['duration'] / self.audio_duration
+                    
+                    clip_x = timeline_start_x + (start_ratio * timeline_width)
+                    clip_width = duration_ratio * timeline_width
+                    
+                    painter.fillRect(int(clip_x), timeline_y, int(clip_width), clip_height, clip['color'])
+                    painter.setPen(QPen(QColor(255, 255, 255, 100), 1))
+                    painter.drawRect(int(clip_x), timeline_y, int(clip_width), clip_height)
+        
+        # NEW: Draw video clips if they exist
+        if hasattr(self, 'video_clips') and hasattr(self, 'audio_duration') and self.audio_duration > 0:
+            clip_y = 30  # Starting Y position for clips
+            clip_height = self.track_height - 40  # Height of each clip rectangle
+            
+            for clip in self.video_clips:
+                # Calculate pixel position based on time
+                # Timeline width represents total music duration
+                pixels_per_second = (self.width() - 20) / self.audio_duration
+                
+                clip_x = 10 + (clip['start_time'] * pixels_per_second)
+                clip_width = clip['duration'] * pixels_per_second
+                
+                # Draw clip rectangle with section color
+                painter.fillRect(int(clip_x), clip_y, int(clip_width), clip_height, clip['color'])
+                
+                # Draw clip border
+                painter.setPen(QPen(QColor(255, 255, 255), 1))
+                painter.drawRect(int(clip_x), clip_y, int(clip_width), clip_height)
+                
+                # Draw clip label (if wide enough)
+                if clip_width > 50:
+                    painter.setPen(QPen(QColor(0, 0, 0)))
+                    # Use smaller font for clip labels
+                    font = painter.font()
+                    font.setPointSize(8)
+                    painter.setFont(font)
+                    painter.drawText(int(clip_x) + 5, clip_y + 15, clip['label'])
+
+    def paintEvent(self, event):
+        self.audio_duration = 0
+
+
+
+

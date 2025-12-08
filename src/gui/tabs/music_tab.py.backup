@@ -1,0 +1,134 @@
+import os
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QPushButton, QFileDialog, QLabel, 
+    QGroupBox, QTextEdit, QHBoxLayout, QSplitter
+)
+from PySide6.QtCore import Qt, Signal, QObject, QRunnable, QThreadPool
+from src.gui.widgets.waveform_widget import WaveformWidget # Import the new widget
+
+class MusicAnalysisSignals(QObject):
+    finished = Signal(dict)
+
+class MusicAnalysisWorker(QRunnable):
+    def __init__(self, audio_path):
+        super().__init__()
+        self.audio_path = audio_path
+        self.signals = MusicAnalysisSignals()
+
+    def run(self):
+        from src.core.deep_music_analyzer import DeepMusicAnalyzer
+        analyzer = DeepMusicAnalyzer()
+        beat_map = analyzer.analyze_music(self.audio_path)
+        self.signals.finished.emit(beat_map)
+
+class MusicTab(QWidget):
+    analysis_complete = Signal(dict)
+    def __init__(self, cache_manager, parent=None):
+        super().__init__(parent)
+        self.cache_manager = cache_manager # This can be used later for caching analysis
+        self.audio_file_path = None
+        self.beat_map = None
+        self.thread_pool = QThreadPool()
+        self.setup_ui()
+
+    def setup_ui(self):
+        main_layout = QVBoxLayout(self)
+        
+        controls_group = QGroupBox("Music Controls")
+        controls_layout = QHBoxLayout()
+        self.import_music_btn = QPushButton("?? Import Music File")
+        self.import_music_btn.setMinimumHeight(40)
+        self.import_music_btn.clicked.connect(self.import_music)
+        self.file_label = QLabel("No music file loaded.")
+        controls_layout.addWidget(self.import_music_btn); controls_layout.addWidget(self.file_label); controls_layout.addStretch()
+        controls_group.setLayout(controls_layout); main_layout.addWidget(controls_group)
+
+        # Create a splitter to hold the waveform and the text analysis
+        content_splitter = QSplitter(Qt.Vertical)
+        
+        # Create and add the waveform widget to the top
+        self.waveform_widget = WaveformWidget()
+        content_splitter.addWidget(self.waveform_widget)
+
+        # Create and add the AI analysis text box to the bottom
+        results_group = QGroupBox("AI Music Analysis")
+        results_layout = QVBoxLayout()
+        self.results_text = QTextEdit()
+        self.results_text.setReadOnly(True)
+        self.results_text.setPlaceholderText("AI analysis of the song's structure and tempo will appear here...")
+        results_layout.addWidget(self.results_text)
+        results_group.setLayout(results_layout)
+        content_splitter.addWidget(results_group)
+        
+        content_splitter.setSizes([200, 300]) # Set initial sizes
+        main_layout.addWidget(content_splitter, 1)
+
+    def import_music(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Import Music", "", "Audio Files (*.mp3 *.wav *.m4a)")
+        if file_path:
+            self.audio_file_path = file_path
+            self.file_label.setText(f"Loaded: {os.path.basename(file_path)}")
+            
+            # Load the audio into the waveform widget to display it immediately
+            self.waveform_widget.load_audio(file_path)
+
+            # Start the deep AI analysis in the background
+            self.results_text.setText(f"Analyzing {os.path.basename(file_path)}...")
+            self.run_analysis()
+
+    def run_analysis(self):
+        self.import_music_btn.setEnabled(False); self.import_music_btn.setText("Analyzing...")
+        worker = MusicAnalysisWorker(self.audio_file_path)
+        worker.signals.finished.connect(self.on_analysis_finished)
+        self.thread_pool.start(worker)
+
+    def on_analysis_finished(self, beat_map):
+        self.import_music_btn.setEnabled(True); self.import_music_btn.setText("?? Import Music File")
+        if beat_map:
+            self.beat_map = beat_map
+            self.current_analysis = beat_map  # Store for AI Director`n            self.analysis_complete.emit(beat_map)
+            
+            # Add the detected beat markers to the waveform widget
+            if 'beat_times' in beat_map:
+                self.waveform_widget.set_beat_markers(beat_map['beat_times'])
+
+            # Display the textual analysis
+            display_text = f"?? DEEP MUSIC ANALYSIS\n\n"
+            display_text += f"??  Duration: {beat_map['duration']:.1f}s\n"
+            display_text += f"?? Tempo: {beat_map['tempo']:.1f} BPM\n"
+            display_text += f"?? Time Signature: {beat_map.get('time_signature', '4/4')}\n\n"
+            
+            display_text += f"?? BEAT DETECTION:\n"
+            display_text += f"   Total Beats: {len(beat_map['beat_times'])}\n"
+            display_text += f"   Strong Beats: {len(beat_map.get('strong_beats', []))}\n"
+            display_text += f"   Weak Beats: {len(beat_map.get('weak_beats', []))}\n\n"
+            
+            if beat_map.get('sections'):
+                display_text += f"?? SONG STRUCTURE ({len(beat_map['sections'])} sections):\n"
+                for section in beat_map['sections']:
+                    display_text += f"   {section['start']:.1f}s-{section['end']:.1f}s: {section['type']} (Energy: {section['energy']:.2f})\n"
+            else:
+                display_text += f"?? SONG STRUCTURE: Continuous flow detected\n"
+            
+            if 'energy_curve' in beat_map and beat_map['energy_curve']:
+                energy_min = min(beat_map['energy_curve'])
+                energy_max = max(beat_map['energy_curve'])
+                display_text += f"\n? ENERGY RANGE: {energy_min:.2f} ? {energy_max:.2f}\n"
+            self.results_text.setText(display_text)
+        else:
+            self.results_text.setText("Audio analysis failed. Please check the console for errors.")
+    
+    def get_analysis_data(self):
+        """Return the current music analysis data"""
+        if hasattr(self, 'current_analysis') and self.current_analysis:
+            return self.current_analysis
+        return {
+            'tempo': 0,
+            'duration': 0,
+            'beats': [],
+            'structure': 'Unknown'
+        }
+
+
+
+

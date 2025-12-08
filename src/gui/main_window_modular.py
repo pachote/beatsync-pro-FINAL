@@ -1,0 +1,274 @@
+import sys, os
+from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget, QVBoxLayout, QStatusBar, QSplitter, QApplication, QLabel, QMessageBox
+from PySide6.QtCore import Qt, QSettings, QThread, QObject, Signal
+from PySide6.QtGui import QPalette, QColor, QAction
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src', 'core')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src', 'gui', 'tabs')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src', 'gui', 'widgets')))
+from core.visual_intelligence_v2 import VisualIntelligenceV2 as AdvancedVideoAnalyzer
+from core.cache_manager import CacheManager
+from core.credits_manager import CreditsManager
+from gui.widgets.timeline import TimelineWidget
+from gui.tabs.music_tab import MusicTab
+from gui.tabs.import_tab import ImportTab
+from gui.tabs.ai_tab import AITab
+from core.video_renderer import VideoRenderer
+
+class AILoaderWorker(QObject):
+    finished = Signal(object)
+    def run(self):
+        analyzer = AdvancedVideoAnalyzer()
+        self.finished.emit(analyzer)
+
+class BeatSyncMainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.settings = QSettings('RENDEREELSTUDIO', 'BeatSyncPro')
+        self.cache_manager = CacheManager()
+        self.credits_manager = CreditsManager()
+        self.analyzer = None
+        self.setup_dark_theme()
+        self.setup_ui_placeholders()
+        self._create_menus()
+        self.load_geometry()
+        self.init_ai_engine_async()
+
+    def setup_dark_theme(self):
+        dark_palette = QPalette()
+        dark_palette.setColor(QPalette.Window, QColor(45, 45, 48))
+        dark_palette.setColor(QPalette.WindowText, Qt.white)
+        QApplication.instance().setPalette(dark_palette)
+        self.setStyleSheet('''
+            QWidget { background-color: #2d2d30; color: #ccc; }
+            QMainWindow { border: 1px solid #3d3d40; }
+            QGroupBox { border:1px solid #3d3d40; border-radius:4px; margin-top:10px; padding-top:10px; font-weight:700; }
+            QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top center; padding: 0 5px; }
+            QTabWidget::pane { border-top: 2px solid #3d3d40; }
+            QTabBar::tab { border-top-left-radius: 4px; border-top-right-radius: 4px; padding: 8px 15px; font-weight: 700; }
+            QTabBar::tab:!selected { background: #2a2a2a; border: 1px solid #3d3d40; color: #888; }
+            QTabBar::tab:selected { background: #2196F3; color: #fff; border: 1px solid #1976D2; border-bottom-color: #2196F3; }
+            QPushButton { background-color: #2196F3; color: #fff; border: none; padding: 8px 15px; border-radius: 4px; font-weight: 700; }
+            QPushButton:hover { background-color: #1976D2; }
+            QPushButton:disabled { background-color: #607D8B; }
+            QMenuBar { background-color: #2d2d30; }
+            QMenuBar::item { padding: 4px 8px; background: transparent; }
+            QMenuBar::item:selected { background-color: #2196F3; }
+            QMenu { background-color: #3d3d40; border: 1px solid #4a4a4a; }
+            QMenu::item:selected { background-color: #2196F3; }
+        ''')
+
+    def setup_ui_placeholders(self):
+        self.setWindowTitle('BeatSync PRO v15 - Cognitive Engine')
+        self.setMinimumSize(900, 700)
+        main_widget = QWidget()
+        self.main_layout = QVBoxLayout(main_widget)
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.showMessage('Initializing...')
+        self.credit_label = QLabel('Credits: --')
+        self.status_bar.addPermanentWidget(self.credit_label)
+        self.loading_label = QLabel('<h2>Booting Cognitive Engine...</h2><p>This may take a moment on first launch.</p>')
+        self.loading_label.setAlignment(Qt.AlignCenter)
+        self.main_layout.addWidget(self.loading_label)
+        self.setCentralWidget(main_widget)
+
+    def _create_menus(self):
+        menu_bar = self.menuBar()
+        file_menu = menu_bar.addMenu('&File')
+        new_proj_action = QAction('New Project', self)
+        open_proj_action = QAction('Open Project...', self)
+        save_proj_action = QAction('Save Project', self)
+        save_proj_as_action = QAction('Save Project As...', self)
+        exit_action = QAction('Exit', self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(new_proj_action)
+        file_menu.addAction(open_proj_action)
+        file_menu.addSeparator()
+        file_menu.addAction(save_proj_action)
+        file_menu.addAction(save_proj_as_action)
+        file_menu.addSeparator()
+        file_menu.addAction(exit_action)
+        help_menu = menu_bar.addMenu('&Help')
+        workflow_action = QAction('Workflow Guide', self)
+        workflow_action.triggered.connect(self._show_workflow_guide)
+        about_action = QAction('About BeatSync PRO', self)
+        about_action.triggered.connect(self._show_about_dialog)
+        help_menu.addAction(workflow_action)
+        help_menu.addAction(about_action)
+
+    def _show_workflow_guide(self):
+        title = 'Workflow: The Synesthetic Engine'
+        text = '''
+        <h3>Welcome to the BeatSync PRO workflow!</h3>
+        <p>This process turns your creative vision into a professional music video.</p>
+        <hr>
+        <h4>1. Import Video (The Perception Core)</h4>
+        <p>Add video clips. The AI analyzes every file, identifying content, style, and quality.</p>
+        <h4>2. Add Music (The Auditory Cortex)</h4>
+        <p>Import your music track. The AI creates a beat map understanding energy, structure, and vocals.</p>
+        <h4>3. Configure & Generate (The Creative Core)</h4>
+        <p>Provide Creative Direction and let the AI generate a professional video.</p>
+        '''
+        QMessageBox.information(self, title, text)
+
+    def _show_about_dialog(self):
+        QMessageBox.about(self, 'About BeatSync PRO', '<h3>BeatSync PRO v15</h3><p>Copyright 2025 RENDEREELSTUDIO.</p>')
+
+    def init_ai_engine_async(self):
+        self.thread = QThread()
+        self.worker = AILoaderWorker()
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.on_ai_engine_ready)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+
+    def on_ai_engine_ready(self, analyzer_instance):
+        self.analyzer = analyzer_instance
+        self.setup_full_ui()
+        self.update_credit_display()
+        if not hasattr(self.analyzer, 'is_ready') or not self.analyzer.is_ready:
+            self.status_bar.showMessage('AI Engine failed to load. Check console.')
+        else:
+            self.status_bar.showMessage('Ready')
+
+    def setup_full_ui(self):
+        self.loading_label.deleteLater()
+        main_splitter = QSplitter(Qt.Vertical)
+        self.tabs = QTabWidget()
+        main_splitter.addWidget(self.tabs)
+        
+        self.import_tab = ImportTab()
+        self.music_tab = MusicTab(cache_manager=self.cache_manager)
+        self.ai_tab = AITab(self, self.credits_manager)
+        
+        self.tabs.addTab(self.import_tab, '1. Import Video')
+        self.tabs.addTab(self.music_tab, '2. Add Music')
+        self.tabs.addTab(self.ai_tab, '3. Configure & Generate')
+        
+        self.timeline_widget = TimelineWidget()
+        main_splitter.addWidget(self.timeline_widget)
+        main_splitter.setSizes([int(self.height() * 0.75), int(self.height() * 0.25)])
+        self.main_layout.addWidget(main_splitter)
+        self.setup_connections()
+
+    def setup_connections(self):
+        self.music_tab.analysis_complete.connect(lambda analysis: self.status_bar.showMessage(f'Tempo: {analysis.get("tempo", 0):.1f} BPM.'))
+        if hasattr(self.ai_tab, 'reanalyze_all'):
+            self.ai_tab.reanalyze_all.connect(self.import_tab.reanalyze_all_videos)
+        if hasattr(self.ai_tab, 'video_generated'):
+            self.ai_tab.video_generated.connect(self.on_video_generated)
+
+    def on_video_generated(self, edit_plan):
+        """Handle video generation with proper threading"""
+        print(f'\n? Main Window received edit plan: {len(edit_plan.get("clips", []))} clips')
+
+        # Get music duration
+        music_data = self.music_tab.get_analysis_data()
+        music_duration = music_data.get('duration', 0)
+
+        if music_duration > 0 and hasattr(self, 'timeline_widget'):
+            track = self.timeline_widget.video_track
+            track.populate_timeline(edit_plan, music_duration)
+            print(f"? Timeline populated: {len(edit_plan.get('clips', []))} clips")
+
+        # Get music path
+        music_path = None
+        if hasattr(self, 'music_tab') and hasattr(self.music_tab, 'audio_file_path'):
+            music_path = self.music_tab.audio_file_path
+
+        if not music_path or not os.path.exists(music_path):
+            self.status_bar.showMessage('?? Please load music first!')
+            return
+
+        # Ask where to save
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        output_path, _ = QFileDialog.getSaveFileName(
+            self,
+            'Save Music Video',
+            'music_video.mp4',
+            'Video Files (*.mp4)'
+        )
+
+        if not output_path:
+            return
+
+        # Start generation with progress
+        print(f'\n?? STARTING VIDEO RENDER')
+        print(f'   Output: {output_path}')
+        
+        try:
+            self.status_bar.showMessage('?? Rendering video...')
+            
+            from core.video_renderer import VideoRenderer
+            
+            def progress_callback(message, percent):
+                self.status_bar.showMessage(f'?? {message} ({percent}%)')
+                from PySide6.QtWidgets import QApplication
+                QApplication.processEvents()
+            
+            renderer = VideoRenderer(progress_callback=progress_callback)
+            final_video = renderer.render_music_video(edit_plan, music_path, output_path)
+            
+            self.status_bar.showMessage(f'? Video saved: {output_path}')
+            QMessageBox.information(
+                self,
+                'Success!',
+                f'Music video generated successfully!\n\nSaved to:\n{output_path}'
+            )
+            
+        except Exception as e:
+            print(f'? Render error: {e}')
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(
+                self,
+                'Error',
+                f'Failed to generate video:\n{str(e)}'
+            )
+
+    def on_generation_progress(self, percent, message):
+        self.status_bar.showMessage(f'?? {message} ({percent}%)')
+    
+    def on_generation_complete(self, output_path):
+        self.status_bar.showMessage(f'? Video saved: {output_path}')
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self,
+            'Success!',
+            f'Music video generated successfully!\n\nSaved to:\n{output_path}'
+        )
+    
+    def on_generation_error(self, error_msg):
+        self.status_bar.showMessage(f'? Error: {error_msg}')
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.critical(self, 'Generation Error', error_msg)
+    def update_credit_display(self):
+        self.credit_label.setText(f'Credits: {self.credits_manager.get_balance()}')
+
+    def closeEvent(self, event):
+        self.save_geometry()
+        super().closeEvent(event)
+
+    def save_geometry(self):
+        self.settings.setValue('geometry', self.saveGeometry())
+        self.settings.setValue('windowState', self.saveState())
+
+
+
+
+    def load_geometry(self):
+        """Load window geometry from settings"""
+        if self.settings.value('geometry'):
+            self.restoreGeometry(self.settings.value('geometry'))
+        if self.settings.value('windowState'):
+            self.restoreState(self.settings.value('windowState'))
+    
+
+
+
+
+
+

@@ -1,0 +1,404 @@
+﻿import os
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+                                QTextEdit, QPushButton, QGroupBox, QRadioButton,
+                                QSlider, QCheckBox, QButtonGroup, QProgressBar,
+                                QScrollArea, QFrame)
+from PySide6.QtCore import Qt, Signal
+from core.claude_director import ClaudeAIDirector
+
+class AITab(QWidget):
+    reanalyze_all = Signal()
+    video_generated = Signal(dict)
+    
+    def __init__(self, parent=None, credits_manager=None):
+        super().__init__(parent)
+        self.parent_window = parent
+        self.credits_manager = credits_manager
+        self.credits_balance = 100 if not credits_manager else credits_manager.get_balance()
+        self.director = ClaudeAIDirector()
+        self.setup_ui()
+    
+    def setup_ui(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        container = QWidget()
+        main_layout = QVBoxLayout(container)
+        
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # 🎨 CREATIVE DIRECTION
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        prompt_label = QLabel('🎨 Creative Direction')
+        prompt_label.setStyleSheet('font-size: 15px; font-weight: bold; color: #4299e1; margin-top: 5px;')
+        main_layout.addWidget(prompt_label)
+        
+        # Prompting Mode
+        mode_group = QGroupBox('Prompting Mode')
+        mode_layout = QVBoxLayout()
+        
+        self.mode_group = QButtonGroup(self)
+        self.auto_mode = QRadioButton('🤖 Auto - AI analyzes videos & music, creates ultimate vision')
+        self.custom_mode = QRadioButton('✍️ Custom - Give AI some creative hints')
+        self.auto_mode.setChecked(True)
+        
+        self.mode_group.addButton(self.auto_mode, 1)
+        self.mode_group.addButton(self.custom_mode, 2)
+        self.auto_mode.toggled.connect(self.toggle_prompt_mode)
+        
+        mode_layout.addWidget(self.auto_mode)
+        mode_layout.addWidget(self.custom_mode)
+        mode_group.setLayout(mode_layout)
+        main_layout.addWidget(mode_group)
+        
+        # Custom vision input (hidden by default)
+        self.vision_group = QGroupBox('Creative Hints (Optional)')
+        vision_layout = QVBoxLayout()
+        
+        vision_hint = QLabel('Give Claude some ideas to work with:')
+        vision_hint.setStyleSheet('color: gray; font-size: 11px;')
+        
+        self.vision_input = QTextEdit()
+        self.vision_input.setPlaceholderText(
+            'Examples:\n'
+            '• "Dark cyberpunk atmosphere with neon accents"\n'
+            '• "Dreamy and ethereal, like a fantasy world"\n'
+            '• "High energy dance party vibes"\n\n'
+            'Claude will analyze your videos & music, then enhance your ideas into an ultimate vision.'
+        )
+        self.vision_input.setMaximumHeight(90)
+        
+        vision_layout.addWidget(vision_hint)
+        vision_layout.addWidget(self.vision_input)
+        self.vision_group.setLayout(vision_layout)
+        self.vision_group.setVisible(False)
+        main_layout.addWidget(self.vision_group)
+        
+        # AI Prompt Preview
+        self.prompt_preview_group = QGroupBox('📋 AI Director\'s Vision (Preview)')
+        preview_layout = QVBoxLayout()
+        
+        self.prompt_preview = QTextEdit()
+        self.prompt_preview.setReadOnly(True)
+        self.prompt_preview.setMaximumHeight(200)
+        self.prompt_preview.setStyleSheet('background-color: #2d3748; color: #a0aec0; font-size: 11px;')
+        self.prompt_preview.setPlainText('Click "Preview Vision" to see what Claude AI Director will create...')
+        
+        self.preview_prompt_btn = QPushButton('⚡ Preview AI Director\'s Vision')
+        self.preview_prompt_btn.clicked.connect(self.generate_prompt_preview)
+        self.preview_prompt_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #805ad5;
+                color: white;
+                font-weight: bold;
+                padding: 6px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #6b46c1;
+            }
+        ''')
+        
+        preview_layout.addWidget(self.prompt_preview)
+        preview_layout.addWidget(self.preview_prompt_btn)
+        self.prompt_preview_group.setLayout(preview_layout)
+        main_layout.addWidget(self.prompt_preview_group)
+        
+        # Separator
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setStyleSheet('color: #4a5568;')
+        main_layout.addWidget(line)
+        
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # ⚙️ SETTINGS
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        settings_label = QLabel('⚙️ Settings')
+        settings_label.setStyleSheet('font-size: 15px; font-weight: bold; color: #4299e1; margin-top: 10px;')
+        main_layout.addWidget(settings_label)
+        
+        # Lip Sync
+        lipsync_group = QGroupBox('Lip Sync')
+        lipsync_layout = QVBoxLayout()
+        
+        self.lipsync_checkbox = QCheckBox('Enable lip sync on detected face clips (10 credits/video)')
+        self.lipsync_checkbox.stateChanged.connect(self.update_cost)
+        
+        lipsync_layout.addWidget(self.lipsync_checkbox)
+        lipsync_group.setLayout(lipsync_layout)
+        main_layout.addWidget(lipsync_group)
+        
+        # Edit Style
+        style_group = QGroupBox('Edit Style')
+        style_layout = QHBoxLayout()
+        
+        self.style_group = QButtonGroup(self)
+        self.fast = QRadioButton('Fast Cuts')
+        self.balanced = QRadioButton('Balanced')
+        self.cinematic = QRadioButton('Cinematic')
+        self.balanced.setChecked(True)
+        
+        self.style_group.addButton(self.fast, 1)
+        self.style_group.addButton(self.balanced, 2)
+        self.style_group.addButton(self.cinematic, 3)
+        
+        style_layout.addWidget(self.fast)
+        style_layout.addWidget(self.balanced)
+        style_layout.addWidget(self.cinematic)
+        style_layout.addStretch()
+        style_group.setLayout(style_layout)
+        main_layout.addWidget(style_group)
+        
+        # Energy Intensity
+        energy_group = QGroupBox('Energy Intensity')
+        energy_layout = QVBoxLayout()
+        
+        slider_layout = QHBoxLayout()
+        slider_layout.addWidget(QLabel('Chill'))
+        
+        self.energy = QSlider(Qt.Horizontal)
+        self.energy.setRange(1, 10)
+        self.energy.setValue(5)
+        
+        slider_layout.addWidget(self.energy)
+        slider_layout.addWidget(QLabel('Chaotic'))
+        
+        self.energy_label = QLabel('Level: 5/10')
+        self.energy_label.setAlignment(Qt.AlignCenter)
+        self.energy.valueChanged.connect(lambda v: self.energy_label.setText(f'Level: {v}/10'))
+        
+        energy_layout.addLayout(slider_layout)
+        energy_layout.addWidget(self.energy_label)
+        energy_group.setLayout(energy_layout)
+        main_layout.addWidget(energy_group)
+        
+        # Cost Estimate - COMPACT
+        cost_group = QGroupBox('Cost Estimate')
+        cost_layout = QHBoxLayout()
+        
+        self.cost_total = QLabel('Total: 5 credits')
+        self.cost_total.setStyleSheet('color: #48bb78; font-size: 13px; font-weight: bold;')
+        
+        self.cost_breakdown = QLabel('Analysis: ✓ | AI: 5 | Lip Sync: 0')
+        self.cost_breakdown.setStyleSheet('color: #a0aec0; font-size: 10px;')
+        
+        self.balance_label = QLabel('Balance: 100')
+        self.balance_label.setStyleSheet('color: #63b3ed; font-size: 11px; font-weight: bold;')
+        
+        cost_layout.addWidget(self.cost_total)
+        cost_layout.addStretch()
+        cost_layout.addWidget(self.cost_breakdown)
+        cost_layout.addStretch()
+        cost_layout.addWidget(self.balance_label)
+        cost_group.setLayout(cost_layout)
+        main_layout.addWidget(cost_group)
+        
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # 🎬 GENERATION
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        gen_label = QLabel('🎬 Generation')
+        gen_label.setStyleSheet('font-size: 15px; font-weight: bold; color: #48bb78; margin-top: 10px;')
+        main_layout.addWidget(gen_label)
+        
+        self.generate_btn = QPushButton('🎬 Generate Music Video (5 credits)')
+        self.generate_btn.setMinimumHeight(50)
+        self.generate_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #48bb78;
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #38a169;
+            }
+            QPushButton:pressed {
+                background-color: #2f855a;
+            }
+        ''')
+        self.generate_btn.clicked.connect(self.generate)
+        main_layout.addWidget(self.generate_btn)
+        
+        # Progress
+        self.progress_group = QGroupBox('Generation Progress')
+        self.progress_group.setVisible(False)
+        progress_layout = QVBoxLayout()
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximum(100)
+        
+        self.progress_label = QLabel('Idle')
+        self.progress_label.setAlignment(Qt.AlignCenter)
+        
+        progress_layout.addWidget(self.progress_bar)
+        progress_layout.addWidget(self.progress_label)
+        self.progress_group.setLayout(progress_layout)
+        main_layout.addWidget(self.progress_group)
+        
+        main_layout.addStretch()
+        
+        scroll.setWidget(container)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(scroll)
+    
+    def toggle_prompt_mode(self):
+        is_custom = self.custom_mode.isChecked()
+        self.vision_group.setVisible(is_custom)
+    
+    def generate_prompt_preview(self):
+        print('\n' + '='*60)
+        print('⚡ PREVIEWING AI DIRECTOR VISION')
+        print('='*60)
+        
+        mode = 'Custom' if self.custom_mode.isChecked() else 'Auto'
+        user_vision = self.vision_input.toPlainText().strip()
+        
+        # Get REAL data
+        video_analyses = self._get_video_analyses()
+        music_analysis = self._get_music_analysis()
+        
+        # Analyze what we actually have
+        total_clips = len(video_analyses)
+        subjects = {}
+        styles = {}
+        energies = []
+        lipsync_clips = 0
+        
+        for data in video_analyses.values():
+            # Count subjects
+            subject = data.get('subject_type', 'unknown')
+            subjects[subject] = subjects.get(subject, 0) + 1
+            
+            # Count styles
+            style = data.get('art_style', 'unknown')
+            styles[style] = styles.get(style, 0) + 1
+            
+            # Track energy
+            energies.append(data.get('energy_level', 5))
+            
+            # Count lip sync suitable
+            if data.get('lip_sync_suitable'):
+                lipsync_clips += 1
+        
+        avg_energy = sum(energies) / len(energies) if energies else 5
+        top_subject = max(subjects.items(), key=lambda x: x[1])[0] if subjects else 'unknown'
+        top_style = max(styles.items(), key=lambda x: x[1])[0] if styles else 'unknown'
+        
+        bpm = music_analysis.get('tempo', 0)
+        duration = music_analysis.get('duration', 0)
+        
+        if mode == 'Auto':
+            preview = f"""AI Director will create an ultimate music video using:
+
+📹 YOUR VIDEOS ({total_clips} clips):
+   • Primary subject: {top_subject} ({subjects.get(top_subject, 0)} clips)
+   • Art style: {top_style}
+   • Average energy: {avg_energy:.1f}/10
+   • Lip sync ready: {lipsync_clips} clips
+
+🎵 YOUR MUSIC:
+   • Tempo: {bpm:.1f} BPM
+   • Duration: {duration:.1f}s
+   • Structure: Analyzed
+
+🎬 AI DIRECTOR'S PLAN:
+Will sync {top_subject} clips to {bpm:.1f} BPM, match energy progression from calm intro to intense climax. Use {top_style} aesthetic throughout. {"Include lip-synced vocals on " + str(lipsync_clips) + " face clips." if lipsync_clips > 0 else ""}"""
+        else:
+            preview = f"""AI Director takes your vision: "{user_vision}"
+
+📹 ANALYZING YOUR CONTENT:
+   • {total_clips} clips: {top_subject} themed
+   • Style: {top_style}
+   • Energy range: {min(energies) if energies else 0}-{max(energies) if energies else 0}/10
+
+🎵 MUSIC SYNC:
+   • {bpm:.1f} BPM structure
+   • {duration:.1f} second duration
+
+🎬 ENHANCED VISION:
+Will take "{user_vision}" and execute using detected {top_subject} content with {top_style} aesthetic, perfectly synced to {bpm:.1f} BPM. {f"Emphasize lip sync on {lipsync_clips} suitable clips during vocals." if lipsync_clips > 0 else ""}"""
+        
+        self.prompt_preview.setPlainText(preview)
+        print(f'Preview shown: {total_clips} clips, {bpm:.1f} BPM')
+        print('='*60 + '\n')
+    
+    def update_cost(self):
+        base = 5
+        lipsync_count = 3
+        lipsync = lipsync_count * 10 if self.lipsync_checkbox.isChecked() else 0
+        total = base + lipsync
+        
+        self.cost_total.setText(f'Total: {total} credits')
+        self.cost_breakdown.setText(f'Analysis: ✓ | AI: {base} | Lip Sync: {lipsync}')
+        self.generate_btn.setText(f'🎬 Generate Music Video ({total} credits)')
+    
+    def generate(self):
+        print('\n' + '='*80)
+        print('🎬 STAGE 2: CLAUDE AI DIRECTOR - CREATING EDIT PLAN')
+        print('='*80)
+        
+        # Show progress
+        self.progress_group.setVisible(True)
+        self.generate_btn.setEnabled(False)
+        self.progress_label.setText('Step 1/3: Gathering video analysis...')
+        self.progress_bar.setValue(10)
+        
+        # Get data from parent tabs
+        video_analyses = self._get_video_analyses()
+        music_analysis = self._get_music_analysis()
+        
+        self.progress_label.setText('Step 2/3: Calling Claude AI Director...')
+        self.progress_bar.setValue(30)
+        
+        # Build config
+        user_config = {
+            'mode': 'Auto' if self.auto_mode.isChecked() else 'Custom',
+            'vision': self.vision_input.toPlainText().strip(),
+            'style': ['Fast', 'Balanced', 'Cinematic'][self.style_group.checkedId()-1],
+            'energy': self.energy.value(),
+            'lipsync': self.lipsync_checkbox.isChecked()
+        }
+        
+        print(f'\n📋 Configuration:')
+        print(f'   Mode: {user_config["mode"]}')
+        print(f'   Vision: {user_config["vision"] if user_config["vision"] else "Auto"}')
+        print(f'   Videos: {len(video_analyses)} analyzed')
+        print(f'   Music: {music_analysis.get("tempo", 0)} BPM, {music_analysis.get("duration", 0)}s')
+        
+        # CALL CLAUDE AI DIRECTOR
+        edit_plan = self.director.create_edit_plan(video_analyses, music_analysis, user_config)
+        
+        self.progress_label.setText('Step 3/3: Sending to timeline...')
+        self.progress_bar.setValue(90)
+        
+        # Emit to main window
+        self.video_generated.emit(edit_plan)
+        
+        self.progress_bar.setValue(100)
+        self.progress_label.setText(f'✅ Complete! {len(edit_plan.get("clips", []))} clips arranged')
+        self.generate_btn.setEnabled(True)
+        
+        print('\n' + '='*80)
+        print(f'✅ EDIT PLAN CREATED: {len(edit_plan.get("clips", []))} clips')
+        print(f'   Vision: {edit_plan.get("creative_vision", "N/A")}')
+        print('='*80 + '\n')
+    
+    def _get_video_analyses(self):
+        """Get video analysis data from import tab"""
+        if self.parent_window and hasattr(self.parent_window, 'import_tab'):
+            return self.parent_window.import_tab.get_video_data()
+        return {}
+    
+    def _get_music_analysis(self):
+        """Get music analysis from music tab"""
+        if self.parent_window and hasattr(self.parent_window, 'music_tab'):
+            return self.parent_window.music_tab.get_analysis_data()
+        return {'tempo': 120, 'duration': 180, 'beats': []}
+
+
+
+
+
+

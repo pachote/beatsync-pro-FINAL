@@ -1,0 +1,263 @@
+"""
+BeatSync PRO - Deep Music Analysis Engine
+Superhuman music understanding using librosa
+"""
+
+import librosa
+import numpy as np
+from typing import Dict, List, Tuple
+from pathlib import Path
+
+
+class DeepMusicAnalyzer:
+    """
+    Advanced music analysis for impossible-to-coordinate editing
+    Provides millisecond-precise understanding of musical structure
+    """
+    
+    def __init__(self):
+        self.sample_rate = 22050  # Standard for music analysis
+    
+    def analyze_music(self, audio_path: str) -> Dict:
+        """
+        Complete deep analysis of music file
+        Returns all data needed for superhuman editing decisions
+        """
+        print("\n?? Deep Music Analysis Starting...")
+        print(f"   Analyzing: {Path(audio_path).name}")
+        
+        # Load audio
+        y, sr = librosa.load(audio_path, sr=self.sample_rate)
+        duration = librosa.get_duration(y=y, sr=sr)
+        
+        print(f"   Duration: {duration:.1f}s | Sample Rate: {sr}Hz")
+        
+        # 1. Beat Detection (with confidence scores)
+        print("   ?? Detecting beats and downbeats...")
+        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+        beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+        
+        # Get beat strength
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+        beat_strengths = onset_env[beat_frames]
+        
+        # Classify strong vs weak beats
+        strength_threshold = np.percentile(beat_strengths, 60)
+        strong_beats = beat_times[beat_strengths > strength_threshold]
+        weak_beats = beat_times[beat_strengths <= strength_threshold]
+        
+        print(f"   ? Found {len(beat_times)} beats @ {tempo:.1f} BPM")
+        print(f"      Strong beats: {len(strong_beats)} | Weak beats: {len(weak_beats)}")
+        
+        # 2. Energy Curve (0.1s resolution)
+        print("   ? Computing energy curve...")
+        energy_curve = self._compute_energy_curve(y, sr, resolution=0.1)
+        print(f"   ? Energy curve: {len(energy_curve)} points @ 0.1s resolution")
+        
+        # 3. Spectral Analysis
+        print("   ?? Analyzing frequency content...")
+        spectral_features = self._analyze_spectral_features(y, sr)
+        print(f"   ? Spectral analysis complete")
+        
+        # 4. Musical Section Detection
+        print("   ?? Detecting musical sections...")
+        sections = self._detect_sections(y, sr, beat_times)
+        print(f"   ? Found {len(sections)} sections")
+        for section in sections[:5]:  # Show first 5
+            print(f"      {section['start']:.1f}s: {section['type']} (energy: {section['energy']:.2f})")
+        
+        # 5. Tempo Variations
+        print("   ?? Analyzing tempo stability...")
+        tempo_curve = self._analyze_tempo_curve(y, sr)
+        
+        # 6. Time Signature Estimation
+        time_signature = self._estimate_time_signature(beat_times)
+        print(f"   ? Time signature: {time_signature}")
+        
+        print("? Deep Music Analysis Complete!\n")
+        
+        return {
+            'duration': duration,
+            'tempo': tempo,
+            'time_signature': time_signature,
+            'beat_times': beat_times.tolist(),
+            'strong_beats': strong_beats.tolist(),
+            'weak_beats': weak_beats.tolist(),
+            'beat_strengths': beat_strengths.tolist(),
+            'energy_curve': energy_curve,
+            'spectral_features': spectral_features,
+            'sections': sections,
+            'tempo_curve': tempo_curve
+        }
+    
+    def _compute_energy_curve(self, y: np.ndarray, sr: int, resolution: float = 0.1) -> List[Dict]:
+        """Compute energy at specified time resolution"""
+        hop_length = int(resolution * sr)
+        
+        # RMS energy
+        rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+        
+        # Normalize to 0-1
+        rms_normalized = (rms - rms.min()) / (rms.max() - rms.min())
+        
+        # Create time points
+        times = np.arange(len(rms)) * resolution
+        
+        energy_curve = []
+        for t, energy in zip(times, rms_normalized):
+            energy_curve.append({
+                'time': float(t),
+                'energy': float(energy)
+            })
+        
+        return energy_curve
+    
+    def _analyze_spectral_features(self, y: np.ndarray, sr: int) -> Dict:
+        """Analyze frequency content"""
+        # Spectral centroid (brightness)
+        spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+        
+        # Spectral rolloff (high frequency content)
+        spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
+        
+        # Zero crossing rate (noisiness)
+        zcr = librosa.feature.zero_crossing_rate(y)[0]
+        
+        # MFCC (timbre)
+        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+        
+        return {
+            'brightness': float(np.mean(spectral_centroids)),
+            'high_freq_energy': float(np.mean(spectral_rolloff)),
+            'noisiness': float(np.mean(zcr)),
+            'timbre_variance': float(np.var(mfccs))
+        }
+    
+    def _detect_sections(self, y: np.ndarray, sr: int, beat_times: np.ndarray) -> List[Dict]:
+        """
+        Detect musical sections (intro/verse/chorus/bridge/outro)
+        Based on energy and spectral changes
+        """
+        # Compute chroma features for harmony analysis
+        chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+        
+        # Segment using recurrence matrix
+        R = librosa.segment.recurrence_matrix(chroma, mode='affinity')
+        
+        # Detect boundaries
+        boundaries = librosa.segment.agglomerative(chroma, k=8)
+        boundary_times = librosa.frames_to_time(boundaries, sr=sr)
+        
+        # Analyze energy for each section
+        sections = []
+        rms = librosa.feature.rms(y=y)[0]
+        
+        for i in range(len(boundary_times) - 1):
+            start_time = float(boundary_times[i])
+            end_time = float(boundary_times[i + 1])
+            
+            # Get frames for this section
+            start_frame = int(start_time * sr / 512)
+            end_frame = int(end_time * sr / 512)
+            
+            # Calculate section energy
+            section_energy = np.mean(rms[start_frame:end_frame])
+            
+            # Classify section type based on energy and position
+            section_type = self._classify_section(
+                start_time, 
+                end_time, 
+                section_energy, 
+                len(boundary_times)
+            )
+            
+            sections.append({
+                'start': start_time,
+                'end': end_time,
+                'duration': end_time - start_time,
+                'type': section_type,
+                'energy': float(section_energy)
+            })
+        
+        return sections
+    
+    def _classify_section(self, start: float, end: float, energy: float, total_sections: int) -> str:
+        """Classify musical section based on position and energy"""
+        # Normalize position (0-1)
+        position = start / (end * total_sections)
+        
+        # Simple heuristic classification
+        if position < 0.1:
+            return 'intro'
+        elif position > 0.9:
+            return 'outro'
+        elif energy > 0.7:
+            return 'chorus' if position > 0.3 else 'drop'
+        elif energy < 0.4:
+            return 'breakdown'
+        else:
+            return 'verse'
+    
+    def _analyze_tempo_curve(self, y: np.ndarray, sr: int) -> List[Dict]:
+        """Analyze tempo variations over time"""
+        # Use tempogram for local tempo estimation
+        hop_length = 512
+        oenv = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
+        tempogram = librosa.feature.tempogram(onset_envelope=oenv, sr=sr, hop_length=hop_length)
+        
+        # Get dominant tempo at each point
+        tempo_times = librosa.frames_to_time(np.arange(tempogram.shape[1]), sr=sr, hop_length=hop_length)
+        
+        tempo_curve = []
+        for t in tempo_times[::10]:  # Sample every 10th point
+            tempo_curve.append({
+                'time': float(t),
+                'stable': True  # Placeholder - could detect tempo changes
+            })
+        
+        return tempo_curve
+    
+    def _estimate_time_signature(self, beat_times: np.ndarray) -> str:
+        """Estimate time signature (4/4, 3/4, etc)"""
+        # Analyze beat intervals
+        intervals = np.diff(beat_times)
+        
+        # Most music is 4/4
+        # Could do more sophisticated analysis here
+        return "4/4"
+    
+    def get_energy_at_time(self, energy_curve: List[Dict], time: float) -> float:
+        """Get energy level at specific time (interpolated)"""
+        if not energy_curve:
+            return 0.5
+        
+        # Find closest points
+        times = [p['time'] for p in energy_curve]
+        energies = [p['energy'] for p in energy_curve]
+        
+        # Linear interpolation
+        return float(np.interp(time, times, energies))
+    
+    def get_section_at_time(self, sections: List[Dict], time: float) -> Dict:
+        """Get musical section at specific time"""
+        for section in sections:
+            if section['start'] <= time < section['end']:
+                return section
+        
+        # Return last section if past end
+        return sections[-1] if sections else {'type': 'unknown', 'energy': 0.5}
+    
+    def is_phrase_boundary(self, time: float, beat_times: List[float], bars: int = 4) -> bool:
+        """Check if time is near a phrase boundary (4-bar, 8-bar, etc)"""
+        if not beat_times:
+            return False
+        
+        # Find closest beat
+        beat_times = np.array(beat_times)
+        closest_idx = np.argmin(np.abs(beat_times - time))
+        
+        # Check if it's a multiple of bars (assuming 4/4)
+        beats_per_bar = 4
+        phrase_beats = bars * beats_per_bar
+        
+        return closest_idx % phrase_beats == 0

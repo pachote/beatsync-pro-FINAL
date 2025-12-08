@@ -1,0 +1,166 @@
+﻿import anthropic
+import json
+from config import CLAUDE_API_KEY
+
+class ClaudeAIDirector:
+    def __init__(self):
+        self.client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+    
+    def create_edit_plan(self, video_analyses, music_analysis, user_config):
+        """
+        Uses Claude to create an intelligent edit decision list
+        
+        Args:
+            video_analyses: Dict of {video_path: analysis_data}
+            music_analysis: Dict with BPM, structure, duration
+            user_config: Dict with mode, vision, style, energy, lipsync
+        """
+        
+        print('🎬 Claude AI Director: Creating edit plan...')
+        
+        # Build comprehensive prompt for Claude
+        prompt = self._build_director_prompt(video_analyses, music_analysis, user_config)
+        
+        try:
+            response = self.client.messages.create(
+                model='claude-sonnet-4-20250514',
+                max_tokens=4096,
+                messages=[{
+                    'role': 'user',
+                    'content': prompt
+                }]
+            )
+            
+            # Parse Claude's response
+            text = response.content[0].text.strip()
+            
+            # Extract JSON
+            if '`json' in text:
+                import re
+                json_match = re.search(r'`json\s*(\{.*?\})\s*`', text, re.DOTALL)
+                if json_match:
+                    text = json_match.group(1)
+            elif '`' in text:
+                text = text.split('`')[1].strip()
+            
+            edit_plan = json.loads(text)
+            
+            print(f'✅ Edit plan created: {len(edit_plan.get("clips", []))} clips')
+            return edit_plan
+            
+        except Exception as e:
+            print(f'❌ Director error: {e}')
+            return self._get_fallback_plan(video_analyses, music_analysis)
+    
+    def _build_director_prompt(self, video_analyses, music_analysis, user_config):
+        """Build the ultimate prompt for Claude"""
+        
+        # Summarize video content
+        video_summary = self._summarize_videos(video_analyses)
+        
+        # User vision
+        mode = user_config.get('mode', 'Auto')
+        vision = user_config.get('vision', '')
+        
+        prompt = f"""You are an expert music video director and editor. Create a detailed edit decision list for a music video.
+
+**USER CREATIVE DIRECTION:**
+Mode: {mode}
+{f'Vision: "{vision}"' if vision and mode == 'Custom' else 'Vision: Create the best possible music video based on available content'}
+
+**MUSIC ANALYSIS:**
+- BPM: {music_analysis.get('tempo', 120)}
+- Duration: {music_analysis.get('duration', 180)}s
+- Structure: {music_analysis.get('structure', 'Unknown')}
+- Beats: {len(music_analysis.get('beats', []))} detected
+
+**AVAILABLE VIDEO CLIPS ({len(video_analyses)} total):**
+{video_summary}
+
+**USER PREFERENCES:**
+- Edit Style: {user_config.get('style', 'Balanced')}
+- Energy Level: {user_config.get('energy', 5)}/10
+- Lip Sync: {'Enabled' if user_config.get('lipsync') else 'Disabled'}
+
+**YOUR TASK:**
+Create a JSON edit plan that syncs perfectly to the music. Return ONLY valid JSON:
+
+{{
+  "creative_vision": "Your enhanced creative vision statement",
+  "clips": [
+    {{
+      "video_path": "path/to/video.mp4",
+      "start_time": 0.0,
+      "end_time": 3.5,
+      "clip_duration": 3.5,
+      "song_section": "intro",
+      "reason": "High energy deity clip for impactful opening",
+      "effects": ["fade_in", "color_grade_warm"]
+    }}
+  ],
+  "transitions": ["cut", "crossfade", "whip_pan"],
+  "color_grading": "vibrant_neon",
+  "overall_pacing": "fast"
+}}
+
+**RULES:**
+1. Total duration must match song length ({music_analysis.get('duration', 180)}s)
+2. Sync cuts to major beats when using Fast Cuts style
+3. Match clip energy levels to song intensity
+4. Use variety - don't repeat the same clip back-to-back
+5. Build energy through the video (calm intro → intense chorus)
+6. For lip sync videos, place them during vocal sections
+7. Consider color harmony and visual flow
+
+CREATE THE EDIT PLAN NOW:"""
+        
+        return prompt
+    
+    def _summarize_videos(self, video_analyses):
+        """Create a concise summary of available clips"""
+        
+        summary_lines = []
+        
+        for i, (path, data) in enumerate(list(video_analyses.items())[:50]):  # Limit to 50 for token efficiency
+            filename = data.get('filename', path.split('/')[-1])
+            subject = data.get('subject_type', 'unknown')
+            style = data.get('art_style', 'unknown')
+            energy = data.get('energy_level', 5)
+            duration = data.get('duration', 0)
+            lipsync = '🎤' if data.get('lip_sync_suitable') else ''
+            
+            summary_lines.append(
+                f"{i+1}. {filename}: {subject} | {style} | Energy {energy}/10 | {duration:.1f}s {lipsync}"
+            )
+        
+        if len(video_analyses) > 50:
+            summary_lines.append(f"... and {len(video_analyses) - 50} more clips")
+        
+        return '\n'.join(summary_lines)
+    
+    def _get_fallback_plan(self, video_analyses, music_analysis):
+        """Simple fallback if Claude fails"""
+        
+        clips = []
+        duration = music_analysis.get('duration', 180)
+        num_clips = min(len(video_analyses), int(duration / 3))
+        
+        for i, (path, data) in enumerate(list(video_analyses.items())[:num_clips]):
+            clips.append({
+                'video_path': path,
+                'start_time': i * 3,
+                'end_time': (i + 1) * 3,
+                'clip_duration': 3,
+                'song_section': 'auto',
+                'reason': 'Fallback plan',
+                'effects': []
+            })
+        
+        return {
+            'creative_vision': 'Auto-generated fallback plan',
+            'clips': clips,
+            'transitions': ['cut'],
+            'color_grading': 'none',
+            'overall_pacing': 'balanced'
+        }
+

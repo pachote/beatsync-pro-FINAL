@@ -1,0 +1,4884 @@
+﻿import beatsync_dialogs
+
+import webbrowser
+
+
+
+# REMOVED FOR LAUNCH - # REMOVED FOR LAUNCH - # BeatSync PRO™ Ultimate - Patent Pending Trademark Pending
+
+# Enable UTF-8 mode for Python (CRITICAL for Windows)
+
+import os
+
+os.environ['PYTHONUTF8'] = '1'
+
+
+
+import sys
+
+from pathlib import Path
+
+import logging
+
+import logging.handlers
+
+from datetime import datetime
+
+
+
+def setup_production_logging():
+
+    """Configure production logging with UTF-8 support"""
+
+    log_dir = Path.home() / 'AppData' / 'Local' / 'BeatSync' / 'logs'
+
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    
+
+    logger = logging.getLogger()
+
+    logger.setLevel(logging.DEBUG)
+
+    logger.handlers.clear()
+
+    
+
+    # File handler with UTF-8 encoding (bypasses console)
+
+    log_file = log_dir / f"beatsync_{datetime.now():%Y%m%d_%H%M%S}.log"
+
+    file_handler = logging.handlers.RotatingFileHandler(
+
+        log_file,
+
+        maxBytes=10*1024*1024,
+
+        backupCount=5,
+
+        encoding='utf-8',
+
+        errors='backslashreplace'
+
+    )
+
+    file_handler.setLevel(logging.DEBUG)
+
+    
+
+    # Console handler with safe encoding
+
+    console_handler = logging.StreamHandler(sys.stdout)
+
+    console_handler.setLevel(logging.INFO)
+
+    console_handler.setFormatter(logging.Formatter('%(message)s'))
+
+    
+
+    formatter = logging.Formatter(
+
+        '%(asctime)s | %(levelname)-8s | %(message)s',
+
+        datefmt='%Y-%m-%d %H:%M:%S'
+
+    )
+
+    file_handler.setFormatter(formatter)
+
+    
+
+    logger.addHandler(file_handler)
+
+    logger.addHandler(console_handler)
+
+    
+
+    logger.info("=== BeatSync PRO Started ===")
+
+    logger.info(f"Log: {log_file}")
+
+    print(f"[LOG] {log_file}")
+
+    return logger
+
+
+
+# Initialize logging FIRST
+
+logger = setup_production_logging()
+
+
+
+import cv2
+
+"""
+
+BEATSYNC PRO v15 - PROFESSIONAL PERFECTION
+
+Audio cards perfect, video thumbnails beautiful, nothing cut off
+
+"""
+
+
+
+from PySide6.QtWidgets import *
+
+from PySide6.QtCore import *
+
+from PySide6.QtGui import *
+
+from waveform_widget import WaveformWidget
+
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+
+from PySide6.QtMultimediaWidgets import QVideoWidget
+
+# VLC for smooth video playback
+import vlc
+
+import random
+
+sys.path.insert(0, "src/gui")
+
+from compact_preset_system import CompactPresetSelector
+
+import os
+
+from video_worker import VideoGenerationWorker
+
+
+
+
+
+# AGI Director Intelligence
+
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from core.agi_director_intelligence import AGIDirectorIntelligence, ClipAnalysis, BeatSegment
+
+
+
+class ProColors:
+
+    BG_DEEP = "#1A1D23"
+
+    BG_SURFACE = "#252932"
+
+    BG_ELEVATED = "#2D3139"
+
+    BG_INPUT = "#353B45"
+
+    BLUE_PRIMARY = "#4A9EFF"
+
+    BLUE_HOVER = "#5BAEFF"
+
+    BLUE_DARK = "#3B8EEF"
+
+    GREEN_SUCCESS = "#0ECB81"
+
+    AMBER_WARNING = "#F6B93B"
+
+    RED_DELETE = "#FF4757"
+
+    TEXT_PRIMARY = "#FFFFFF"
+
+    TEXT_SECONDARY = "#C5CBD3"
+
+    TEXT_TERTIARY = "#8F95A3"
+
+    TEXT_DIM = "#6B7280"
+
+    BORDER = "#3A404A"
+
+    DIVIDER = "#2F3541"
+
+
+
+class BeatSyncLogo(QWidget):
+
+    def __init__(self, size=28):
+
+        super().__init__()
+
+        self.setFixedSize(size, size)
+
+    
+
+    def paintEvent(self, event):
+
+        painter = QPainter(self)
+
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        
+
+        size = self.width()
+
+        center = size // 2
+
+        
+
+        gradient = QRadialGradient(center, center, size // 2)
+
+        gradient.setColorAt(0, QColor(ProColors.BLUE_PRIMARY))
+
+        gradient.setColorAt(1, QColor(ProColors.BLUE_DARK))
+
+        
+
+        painter.setBrush(QBrush(gradient))
+
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        painter.drawEllipse(2, 2, size - 4, size - 4)
+
+        
+
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        painter.setBrush(QColor(255, 255, 255, 220))
+
+        
+
+        bar_width = size // 10
+
+        spacing = size // 10
+
+        heights = [0.4, 0.7, 0.5]
+
+        x_start = size // 4
+
+        
+
+        for i, h in enumerate(heights):
+
+            x = x_start + (i * (bar_width + spacing))
+
+            bar_height = int(size * h)
+
+            y = center - bar_height // 2
+
+            painter.drawRoundedRect(x, y, bar_width, bar_height, 2, 2)
+
+
+
+class CreditCalculator:
+
+    PRICING = {
+
+        'base': 1,
+
+        'local': 0,
+
+        'local': 0,
+
+        'premium': 10
+
+    }
+
+    
+
+    @classmethod
+
+    def calculate(cls, audio_duration_sec, lip_sync_model):
+
+        base = cls.PRICING['base']
+
+        
+
+        if lip_sync_model == 'local':
+
+            return base
+
+        elif lip_sync_model == 'standard':
+
+            return base + cls.PRICING['standard']
+
+        elif lip_sync_model == 'pro':
+
+            return base + cls.PRICING['pro']
+
+        
+
+        return base
+
+    
+
+    @classmethod
+
+    def get_breakdown(cls, lip_sync_model):
+
+        base = cls.PRICING['base']
+
+        
+
+        if lip_sync_model == 'local':
+
+            return [
+
+                ('AI Video Generation', base, False),
+
+                ('Local Lip Sync', 0, True)
+
+            ]
+
+        elif lip_sync_model == 'standard':
+
+            return [
+
+                ('AI Video Generation', base, False),
+
+                ('Standard Lip Sync', cls.PRICING['standard'], True)
+
+            ]
+
+        elif lip_sync_model == 'pro':
+
+            return [
+
+                ('AI Video Generation', base, False),
+
+                ('Pro Lip Sync', cls.PRICING['pro'], True)
+
+            ]
+
+        
+
+        return [('AI Video Generation', base, True)]
+
+
+
+class AudioTrackCard(QWidget):
+
+    """PROFESSIONAL AUDIO TRACK CARD"""
+
+    selected = Signal(object)
+
+    deleted = Signal(object)
+
+    
+
+    def __init__(self, filename, duration, bpm, parent=None):
+
+        super().__init__(parent)
+
+        self.filename = filename
+
+        self.duration = duration
+
+        self.bpm = bpm
+
+        self.setup_ui()
+
+    def show_styled_warning(self, title, message):
+        """Show styled warning popup"""
+        from PySide6.QtWidgets import QMessageBox
+        msgbox = QMessageBox(self)
+        msgbox.setWindowTitle(title)
+        msgbox.setText(message)
+        msgbox.setIcon(QMessageBox.Warning)
+        msgbox.setStyleSheet(
+            'QMessageBox { background-color: #1e1e1e; color: #ffffff; } '
+            'QMessageBox QLabel { color: #ffffff; font-size: 13px; padding: 10px; } '
+            'QPushButton { background-color: #3a86ff; color: white; border: none; '
+            'border-radius: 4px; padding: 8px 20px; font-weight: bold; min-width: 80px; } '
+            'QPushButton:hover { background-color: #5094ff; } '
+            'QPushButton:pressed { background-color: #2875ef; }'
+        )
+        msgbox.exec()
+
+
+    
+
+    def setup_ui(self):
+
+        self.setMinimumHeight(64)  # Taller for better layout
+
+        self.setObjectName("audioCard")
+
+        
+
+        layout = QHBoxLayout(self)
+
+        layout.setContentsMargins(12, 10, 12, 10)
+
+        layout.setSpacing(12)
+
+        
+
+        # Radio button
+
+        self.radio = QRadioButton()
+
+        self.radio.toggled.connect(lambda: self.selected.emit(self))
+
+        layout.addWidget(self.radio)
+
+        
+
+        # Info section with proper word wrap
+
+        info_layout = QVBoxLayout()
+
+        info_layout.setSpacing(4)
+
+        
+
+        # Filename with ellipsis if too long
+
+        # Get just the filename, not full path
+        import os
+        display_name = os.path.basename(self.filename)
+        if len(display_name) > 25:
+            display_name = display_name[:22] + "..."
+
+        
+
+        name_label = QLabel(display_name)
+
+        name_label.setStyleSheet(f"""
+
+            font-size: 12px; 
+
+            font-weight: 600; 
+
+            color: {ProColors.TEXT_PRIMARY};
+
+        """)
+
+        name_label.setWordWrap(False)
+
+        info_layout.addWidget(name_label)
+
+        
+
+        # Duration and BPM
+
+        meta_label = QLabel(f"{self.duration} â€¢ {self.bpm} BPM")
+
+        meta_label.setStyleSheet(f"""
+
+            font-size: 10px; 
+
+            color: {ProColors.TEXT_TERTIARY};
+
+        """)
+
+        info_layout.addWidget(meta_label)
+
+        
+
+        layout.addLayout(info_layout, 1)
+
+        
+
+        # Delete button
+
+        delete_btn = QPushButton("✕")
+
+        delete_btn.setFixedSize(32, 32)
+
+        delete_btn.setObjectName("deleteBtn")
+
+        delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        delete_btn.clicked.connect(lambda: self.deleted.emit(self))
+
+        layout.addWidget(delete_btn)
+
+
+
+class VideoThumbnail(QWidget):
+
+    """PROFESSIONAL VIDEO THUMBNAIL WITH REAL IMAGE PLACEHOLDER"""
+
+    toggled = Signal(object, bool)
+
+    deleted = Signal(object)
+
+    
+
+    def __init__(self, filename, duration, resolution, parent=None):
+
+        super().__init__(parent)
+
+        self.filename = filename
+
+        self.duration = duration
+
+        self.resolution = resolution
+
+        self._hovered = False
+
+        self._checked = True
+
+        self._selected = False  # For multi-select delete
+
+        self.setup_ui()
+
+    
+
+    def setup_ui(self):
+
+        self.setFixedSize(132, 108)  # Slightly smaller for better grid
+
+        self.setObjectName("videoThumb")
+
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        
+
+        layout = QVBoxLayout(self)
+
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        layout.setSpacing(6)
+
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        
+
+        # Thumbnail container
+
+        thumb_container = QWidget()
+
+        thumb_container.setFixedSize(132, 74)  # 16:9 ratio
+
+        thumb_container.setObjectName("thumbContainer")
+
+        
+
+        thumb_layout = QStackedLayout(thumb_container)
+
+        thumb_layout.setContentsMargins(0, 0, 0, 0)
+
+
+
+        # === FIX: EXTRACT REAL VIDEO FRAME ===
+
+        frame_extracted = False
+
+        try:
+
+            print(f'[THUMB] Extracting frame from: {self.filename}')
+
+            video = cv2.VideoCapture(self.filename)
+
+            print(f'[THUMB] VideoCapture created, checking if opened...')
+
+            if video.isOpened():
+
+                print(f'[THUMB] Video opened successfully')
+
+                total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+
+                print(f'[THUMB] Total frames: {total_frames}')
+
+                if total_frames > 0:
+
+                    frame_number = total_frames // 2
+
+                    video.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+
+                    success, frame = video.read()
+
+                    video.release()
+
+                    
+
+                    if success and frame is not None and frame.size > 0:
+
+                        # FIX: Maintain aspect ratio, crop to fit
+
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                        h, w, ch = frame.shape
+
+                        bytes_per_line = ch * w
+
+                        qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+
+                        qt_image = qt_image.copy()
+
+                        pixmap = QPixmap.fromImage(qt_image)
+
+                        # Scale to fit 132x74 while maintaining aspect ratio
+
+                        scaled_pixmap = pixmap.scaled(132, 74, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+
+                        # Crop to exact size
+
+                        if scaled_pixmap.width() > 132:
+
+                            x_offset = (scaled_pixmap.width() - 132) // 2
+
+                            scaled_pixmap = scaled_pixmap.copy(x_offset, 0, 132, 74)
+
+                        elif scaled_pixmap.height() > 74:
+
+                            y_offset = (scaled_pixmap.height() - 74) // 2
+
+                            scaled_pixmap = scaled_pixmap.copy(0, y_offset, 132, 74)
+
+                        real_thumb = QLabel()
+
+                        real_thumb.setPixmap(scaled_pixmap)
+
+                        real_thumb.setScaledContents(False)
+
+                        real_thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+                        thumb_layout.addWidget(real_thumb)
+
+                        thumb_layout.setCurrentWidget(real_thumb)
+
+                        frame_extracted = True
+
+                else:
+
+                    video.release()
+
+        except Exception as e:
+
+            pass
+
+        
+
+        # Create gradient thumbnail placeholder
+
+        self.thumb_widget = QWidget()
+
+        if not frame_extracted:
+
+            pass  # Placeholder already created above
+
+        
+
+        # Create gradient thumbnail placeholder
+
+        self.thumb_widget.setObjectName("thumbPlaceholder")
+
+        
+
+        thumb_content = QVBoxLayout(self.thumb_widget)
+
+        thumb_content.setContentsMargins(0, 0, 0, 0)
+
+        thumb_content.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        
+
+        # Video icon
+
+        icon_label = QLabel("Ã¢▶️Â¶")
+
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        icon_label.setStyleSheet(f"""
+
+            font-size: 24px;
+
+            color: {ProColors.TEXT_SECONDARY};
+
+            background: transparent;
+
+        """)
+
+        thumb_content.addWidget(icon_label)
+
+        
+
+        # Duration badge
+
+        duration_label = QLabel(self.duration)
+
+        duration_label.setStyleSheet(f"""
+
+            font-size: 9px;
+
+            font-weight: 600;
+
+            color: {ProColors.TEXT_PRIMARY};
+
+            background: rgba(0, 0, 0, 180);
+
+            padding: 2px 6px;
+
+            border-radius: 3px;
+
+        """)
+
+        duration_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        
+
+        duration_container = QWidget()
+
+        duration_container.setFixedHeight(20)
+
+        duration_layout = QHBoxLayout(duration_container)
+
+        duration_layout.setContentsMargins(6, 0, 6, 6)
+
+        duration_layout.addStretch()
+
+        duration_layout.addWidget(duration_label)
+
+        
+
+        thumb_layout.addWidget(self.thumb_widget)
+
+        
+
+        # Overlays
+
+        overlay_widget = QWidget(thumb_container)
+
+        overlay_widget.setGeometry(0, 0, 132, 74)
+
+        overlay_widget.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+
+        overlay_widget.raise_()
+
+        
+
+        overlay_layout = QVBoxLayout(overlay_widget)
+
+        overlay_layout.setContentsMargins(6, 6, 6, 6)
+
+        
+
+        # Top row: Delete button
+
+        top_row = QHBoxLayout()
+
+        top_row.addStretch()
+
+        
+
+        self.delete_btn = QPushButton("✕")
+
+        self.delete_btn.setFixedSize(22, 22)
+
+        self.delete_btn.setObjectName("thumbDeleteBtn")
+
+        self.delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.delete_btn.clicked.connect(lambda: self.deleted.emit(self))
+
+        # self.delete_btn.hide()  # ALWAYS SHOW DELETE BUTTON
+
+        top_row.addWidget(self.delete_btn)
+
+        
+
+        overlay_layout.addLayout(top_row)
+
+        overlay_layout.addStretch()
+
+        
+
+        # Bottom row: Checkbox
+
+        bottom_row = QHBoxLayout()
+
+        
+
+        self.checkbox = QCheckBox()
+
+        self.checkbox.setChecked(True)
+
+        self.checkbox.toggled.connect(lambda c: self.toggled.emit(self, c))
+
+        bottom_row.addWidget(self.checkbox)
+
+        bottom_row.addWidget(duration_container)
+
+        bottom_row.addStretch()
+
+        
+
+        overlay_layout.addLayout(bottom_row)
+
+        
+
+        layout.addWidget(thumb_container)
+
+        
+
+        # Filename
+
+        short_name = self.filename
+
+        if len(short_name) > 16:
+
+            short_name = short_name[:13] + "..."
+
+        
+
+        name_label = QLabel(short_name)
+
+        name_label.setStyleSheet(f"""
+
+            font-size: 10px;
+
+            color: {ProColors.TEXT_SECONDARY};
+
+            padding: 0 4px;
+
+        """)
+
+        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        name_label.setWordWrap(False)
+
+        layout.addWidget(name_label)
+
+    
+
+    def enterEvent(self, event):
+
+        self._hovered = True
+
+        self.delete_btn.show()
+
+        self.update()
+
+    
+
+    def leaveEvent(self, event):
+
+        self._hovered = False
+
+        self.delete_btn.hide()
+
+        self.update()
+
+    
+
+    def paintEvent(self, event):
+
+        painter = QPainter(self)
+
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        
+
+        if self._hovered:
+
+            rect = self.rect().adjusted(0, 0, 0, -34)
+
+            painter.setPen(QPen(QColor(ProColors.BLUE_PRIMARY), 2))
+
+            painter.drawRoundedRect(rect, 6, 6)
+
+
+
+class PremiumCostWidget(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.total_credits = 1
+
+        self.breakdown = [('AI Video Generation', 1, False), ('Local Lip Sync', 0, True)]
+
+        self.setup_ui()
+
+    
+
+    def setup_ui(self):
+
+        self.setObjectName("costWidget")
+
+        
+
+        layout = QVBoxLayout(self)
+
+        layout.setContentsMargins(14, 12, 14, 12)
+
+        layout.setSpacing(8)
+
+        
+
+        header_label = QLabel("COST ESTIMATE")
+
+        header_label.setStyleSheet(f"""
+
+            font-size: 9px;
+
+            font-weight: 700;
+
+            color: {ProColors.TEXT_TERTIARY};
+
+            letter-spacing: 1.2px;
+
+        """)
+
+        layout.addWidget(header_label)
+
+        
+
+        self.items_layout = QVBoxLayout()
+
+        self.items_layout.setSpacing(4)
+
+        layout.addLayout(self.items_layout)
+
+        
+
+        divider = QFrame()
+
+        divider.setFrameShape(QFrame.Shape.HLine)
+
+        divider.setStyleSheet(f"background: {ProColors.DIVIDER}; max-height: 1px; margin: 2px 0;")
+
+        layout.addWidget(divider)
+
+        
+
+        total_layout = QHBoxLayout()
+
+        
+
+        total_label = QLabel("Total")
+
+        total_label.setStyleSheet(f"""
+
+            font-size: 12px;
+
+            font-weight: 700;
+
+            color: {ProColors.TEXT_PRIMARY};
+
+        """)
+
+        total_layout.addWidget(total_label)
+
+        total_layout.addStretch()
+
+        
+
+        self.total_value = QLabel("1 credit")
+
+        self.total_value.setStyleSheet(f"""
+
+            font-size: 15px;
+
+            font-weight: 700;
+
+            color: {ProColors.GREEN_SUCCESS};
+
+        """)
+
+        total_layout.addWidget(self.total_value)
+
+        
+
+        layout.addLayout(total_layout)
+
+        
+
+        self.update_cost(1, self.breakdown)
+
+    
+
+    def update_cost(self, total_credits, breakdown):
+
+        self.total_credits = total_credits
+
+        self.breakdown = breakdown
+
+        
+
+        while self.items_layout.count():
+
+            child = self.items_layout.takeAt(0)
+
+            if child.widget():
+
+                child.widget().deleteLater()
+
+        
+
+        for item_name, credits, is_last in breakdown:
+
+            # Skip Local Lip Sync from display
+
+            if item_name == "Local Lip Sync":
+
+                continue
+
+            item_row = QHBoxLayout()
+
+            item_row.setSpacing(8)
+
+            
+
+            name_label = QLabel(item_name)
+
+            name_label.setStyleSheet(f"""
+
+                font-size: 10px;
+
+                color: {ProColors.TEXT_SECONDARY};
+
+            """)
+
+            item_row.addWidget(name_label)
+
+            item_row.addStretch()
+
+            
+
+            if credits == 0:
+
+                credit_label = QLabel("FREE")
+
+                credit_label.setStyleSheet(f"""
+
+                    font-size: 10px;
+
+                    font-weight: 700;
+
+                    color: {ProColors.GREEN_SUCCESS};
+
+                """)
+
+            else:
+
+                credit_label = QLabel(f"{credits} credit{'s' if credits > 1 else ''}")
+
+                credit_label.setStyleSheet(f"""
+
+                    font-size: 10px;
+
+                    font-weight: 600;
+
+                    color: {ProColors.TEXT_TERTIARY};
+
+                """)
+
+            item_row.addWidget(credit_label)
+
+            
+
+            self.items_layout.addLayout(item_row)
+
+        
+
+        plural = 's' if total_credits > 1 else ''
+
+        self.total_value.setText(f"{total_credits} credit{plural}")
+
+        
+
+        if total_credits == 1:
+
+            color = ProColors.GREEN_SUCCESS
+
+        elif total_credits <= 4:
+
+            color = ProColors.BLUE_PRIMARY
+
+        else:
+
+            color = ProColors.AMBER_WARNING
+
+        
+
+        self.total_value.setStyleSheet(f"""
+
+            font-size: 15px;
+
+            font-weight: 700;
+
+            color: {color};
+
+        """)
+
+
+
+
+
+
+
+class TrackMetadataWidget(QWidget):
+    """Compact track analysis display - 6 key stats"""
+
+    def __init__(self):
+        super().__init__()
+        self.setVisible(False)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 6, 14, 6)
+        layout.setSpacing(4)
+        
+        header = QLabel("TRACK ANALYSIS")
+        header.setStyleSheet(f"font-size: 9px; font-weight: 700; color: {ProColors.TEXT_TERTIARY}; letter-spacing: 1.2px;")
+        layout.addWidget(header)
+        
+        container = QFrame()
+        container.setStyleSheet(f"""
+            QFrame {{
+                background: {ProColors.BG_SURFACE};
+                border: 1px solid {ProColors.BORDER};
+                border-radius: 6px;
+            }}
+        """)
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(10, 8, 10, 8)
+        container_layout.setSpacing(6)
+        
+        # Row 1: BPM | Duration | Beats
+        row1 = QHBoxLayout()
+        row1.setSpacing(12)
+        self.bpm_w = self._stat("--", "BPM")
+        self.dur_w = self._stat("--", "Duration")
+        self.beats_w = self._stat("--", "Beats")
+        row1.addWidget(self.bpm_w)
+        row1.addWidget(self.dur_w)
+        row1.addWidget(self.beats_w)
+        row1.addStretch()
+        container_layout.addLayout(row1)
+        
+        # Row 2: Mood | Vocals | Mode
+        row2 = QHBoxLayout()
+        row2.setSpacing(12)
+        self.mood_w = self._stat("--", "Mood")
+        self.vocals_w = self._stat("--", "Vocals")
+        self.mode_w = self._stat("--", "Mode")
+        row2.addWidget(self.mood_w)
+        row2.addWidget(self.vocals_w)
+        row2.addWidget(self.mode_w)
+        row2.addStretch()
+        container_layout.addLayout(row2)
+        
+        layout.addWidget(container)
+
+    def _stat(self, value: str, label: str) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        v = QLabel(value)
+        v.setObjectName("val")
+        v.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {ProColors.BLUE_PRIMARY};")
+        n = QLabel(label)
+        n.setStyleSheet(f"font-size: 8px; color: {ProColors.TEXT_SECONDARY};")
+        lay.addWidget(v)
+        lay.addWidget(n)
+        return w
+
+    def _set(self, widget: QWidget, value: str):
+        lbl = widget.findChild(QLabel, "val")
+        if lbl:
+            lbl.setText(str(value))
+
+    def update_from_analysis(self, analysis: dict):
+        if not analysis:
+            return
+        try:
+            self.setVisible(True)
+            # BPM
+            bpm = analysis.get('bpm', 0)
+            bpm_val = float(bpm) if hasattr(bpm, '__float__') else (float(bpm[0]) if hasattr(bpm, '__getitem__') else 0)
+            self._set(self.bpm_w, f"{bpm_val:.0f}")
+            # Duration
+            dur = analysis.get('duration', 0)
+            dur_val = float(dur) if hasattr(dur, '__float__') else 0
+            self._set(self.dur_w, f"{int(dur_val//60)}:{int(dur_val%60):02d}")
+            # Beats
+            beats = analysis.get('beats', [])
+            self._set(self.beats_w, str(len(beats)))
+            # Mood
+            emotions = analysis.get('emotions', {})
+            mood = emotions.get('primary_emotion', 'neutral') if isinstance(emotions, dict) else 'neutral'
+            self._set(self.mood_w, mood.title())
+            # Mode
+            mode = emotions.get('mode', 'major') if isinstance(emotions, dict) else 'major'
+            self._set(self.mode_w, mode.title())
+            # Vocals
+            vocals = analysis.get('vocals', {})
+            has_vocals = vocals.get('has_vocals', False) if isinstance(vocals, dict) else False
+            self._set(self.vocals_w, "Yes" if has_vocals else "No")
+        except Exception as e:
+            print(f"[!] Track metadata error: {e}")
+
+    def clear(self):
+        self.setVisible(False)
+
+class FinishedVideosWidget(QWidget):
+
+    """Shows list of finished videos with clickable links"""
+
+    def __init__(self):
+
+        super().__init__()
+
+        layout = QVBoxLayout(self)
+
+        layout.setContentsMargins(14, 12, 14, 12)
+
+        layout.setSpacing(8)
+
+        
+
+        header = QLabel("FINISHED VIDEOS")
+
+        header.setStyleSheet(f"font-size: 9px; font-weight: 700; color: {ProColors.TEXT_TERTIARY}; letter-spacing: 1.2px;")
+
+        layout.addWidget(header)
+
+        
+
+        # Open folder button at TOP
+
+        folder_btn = QPushButton("Open Videos Folder")
+
+        folder_btn.setFixedHeight(32)
+
+        folder_btn.setStyleSheet(f"""
+
+            QPushButton {{
+
+                background: {ProColors.BG_ELEVATED};
+
+                border: 1px solid {ProColors.BORDER};
+
+                border-radius: 6px;
+
+                color: {ProColors.TEXT_SECONDARY};
+
+                font-size: 11px;
+
+                padding: 0 12px;
+
+            }}
+
+            QPushButton:hover {{
+
+                background: {ProColors.BG_INPUT};
+
+                border-color: {ProColors.BLUE_PRIMARY};
+
+            }}
+
+        """)
+
+        folder_btn.clicked.connect(self.open_folder)
+
+        layout.addWidget(folder_btn)
+
+        
+
+        # Scrollable list
+
+        scroll = QScrollArea()
+
+        scroll.setWidgetResizable(True)
+
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        scroll.setMinimumHeight(180)
+
+        scroll.setStyleSheet(f"QScrollArea {{ border: none; background: {ProColors.BG_DEEP}; }} QScrollArea > QWidget > QWidget {{ background: {ProColors.BG_DEEP}; }}")
+
+        
+
+        scroll_content = QWidget()
+
+        self.videos_layout = QVBoxLayout(scroll_content)
+
+        self.videos_layout.setSpacing(6)
+
+        self.videos_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.videos_layout.addStretch()
+
+        
+
+        scroll.setWidget(scroll_content)
+
+        layout.addWidget(scroll)
+
+    
+
+    def add_video(self, video_path):
+
+        """Add a finished video to the list"""
+
+        import os
+
+        from pathlib import Path
+
+        
+
+        filename = os.path.basename(video_path)
+
+        
+
+        # Create clickable link
+
+        link = QPushButton(f"▶ {filename}")
+
+        link.setFixedHeight(28)
+
+        link.setStyleSheet(f"""
+
+            QPushButton {{
+
+                background: {ProColors.BG_ELEVATED};
+
+                border: 1px solid {ProColors.BORDER};
+
+                border-radius: 4px;
+
+                color: {ProColors.BLUE_PRIMARY};
+
+                font-size: 10px;
+
+                text-align: left;
+
+                padding: 0 8px;
+
+            }}
+
+            QPushButton:hover {{
+
+                background: {ProColors.BG_INPUT};
+
+                border-color: {ProColors.BLUE_PRIMARY};
+
+            }}
+
+        """)
+
+        link.clicked.connect(lambda: self.open_video(video_path))
+
+        
+
+        # Remove stretch, add video, add stretch back
+
+        self.videos_layout.takeAt(self.videos_layout.count() - 1)
+
+        self.videos_layout.addWidget(link)
+
+        self.videos_layout.addStretch()
+
+        
+
+        # Keep only last 10 videos
+
+        while self.videos_layout.count() > 11:  # 10 videos + 1 stretch
+
+            item = self.videos_layout.takeAt(0)
+
+            if item.widget():
+
+                item.widget().deleteLater()
+
+    
+
+    video_play_requested = None  # Will be set by parent
+
+    
+
+    def open_video(self, path):
+
+        """Play video in app preview"""
+
+        if self.video_play_requested:
+
+            self.video_play_requested(path)
+
+        else:
+
+            # Fallback to external
+
+            import subprocess
+
+            subprocess.run(['explorer', path])
+
+    
+
+    def open_folder(self):
+
+        """Open videos folder"""
+
+        import subprocess
+
+        from pathlib import Path
+
+        folder = Path.home() / "Videos" / "BeatSync"
+
+        folder.mkdir(parents=True, exist_ok=True)
+
+        subprocess.run(['explorer', str(folder)])
+
+
+
+class PresetCard(QWidget):
+
+    clicked = Signal()
+
+    
+
+    def __init__(self, title, subtitle):
+
+        super().__init__()
+
+        self.setFixedHeight(56)
+
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self._checked = False
+
+        self._hovered = False
+
+        
+
+        layout = QVBoxLayout(self)
+
+        layout.setContentsMargins(14, 8, 14, 8)
+
+        layout.setSpacing(2)
+
+        
+
+        title_label = QLabel(title)
+
+        title_label.setStyleSheet(f"""
+
+            font-size: 13px; font-weight: 600; color: {ProColors.TEXT_PRIMARY};
+
+            background: transparent; border: none;
+
+        """)
+
+        layout.addWidget(title_label)
+
+        
+
+        subtitle_label = QLabel(subtitle)
+
+        subtitle_label.setStyleSheet(f"""
+
+            font-size: 10px; color: {ProColors.TEXT_TERTIARY};
+
+            background: transparent; border: none;
+
+        """)
+
+        layout.addWidget(subtitle_label)
+
+    
+
+    def setChecked(self, checked):
+
+        self._checked = checked
+
+        self.update()
+
+    
+
+    def mousePressEvent(self, event):
+
+        """Toggle selection on click (for multi-delete)"""
+
+        from PySide6.QtCore import Qt
+
+        if event.button() == Qt.MouseButton.RightButton:
+
+            # Right-click toggles selection for multi-delete
+
+            self._selected = not self._selected
+
+            if self._selected:
+
+                self.setStyleSheet("border: 2px solid #ff4444; border-radius: 6px;")
+
+            else:
+
+                self.setStyleSheet("")
+
+        else:
+
+            # Left click toggles include/exclude from generation
+
+            self._checked = not self._checked
+
+            self.toggled.emit(self, self._checked)
+
+            self.update()
+
+    
+
+    def enterEvent(self, event):
+
+        self._hovered = True
+
+        self.update()
+
+    
+
+    def leaveEvent(self, event):
+
+        self._hovered = False
+
+        self.update()
+
+    
+
+    def mousePressEvent(self, event):
+
+        self.clicked.emit()
+
+    
+
+    def paintEvent(self, event):
+
+        painter = QPainter(self)
+
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        
+
+        rect = self.rect()
+
+        
+
+        if self._checked:
+
+            painter.setPen(QPen(QColor(ProColors.BLUE_PRIMARY), 2))
+
+            painter.setBrush(QColor(74, 158, 255, 12))
+
+        elif self._hovered:
+
+            painter.setPen(QPen(QColor(ProColors.BORDER), 1))
+
+            painter.setBrush(QColor(ProColors.BG_ELEVATED))
+
+        else:
+
+            painter.setPen(QPen(QColor(ProColors.BORDER), 1))
+
+            painter.setBrush(QColor(ProColors.BG_SURFACE))
+
+        
+
+        painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 6, 6)
+
+
+
+class ResolutionInfoWidget(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setup_ui()
+
+    
+
+    def setup_ui(self):
+
+        layout = QVBoxLayout(self)
+
+        layout.setContentsMargins(12, 10, 12, 10)
+
+        layout.setSpacing(6)
+
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        
+
+        self.status_label = QLabel("No clips imported")
+
+        self.status_label.setStyleSheet(f"color: {ProColors.TEXT_DIM}; font-size: 11px;")
+
+        layout.addWidget(self.status_label)
+
+        
+
+        self.breakdown_label = QLabel("")
+
+        self.breakdown_label.setStyleSheet(f"color: {ProColors.TEXT_TERTIARY}; font-size: 10px;")
+
+        self.breakdown_label.setWordWrap(True)
+
+        layout.addWidget(self.breakdown_label)
+
+    
+
+    def update_clips(self, clips_data):
+
+        count = clips_data.get('count', 0)
+
+        aspect = clips_data.get('aspect', 'Not Set')
+
+        status_text = f"Aspect Ratio: {aspect}"
+
+        breakdown_text = f"{count} video clips"
+
+        self.status_label.setText(status_text)
+
+        self.status_label.setStyleSheet(f"color: {ProColors.TEXT_PRIMARY}; font-size: 11px; font-weight: 600;")
+
+        self.breakdown_label.setText(breakdown_text)
+
+
+
+class FlowLayout(QLayout):
+
+    def __init__(self, parent=None):
+
+        super().__init__(parent)
+
+        self.item_list = []
+
+    
+
+    def addItem(self, item):
+
+        self.item_list.append(item)
+
+    
+
+    def count(self):
+
+        return len(self.item_list)
+
+    
+
+    def itemAt(self, index):
+
+        if 0 <= index < len(self.item_list):
+
+            return self.item_list[index]
+
+        return None
+
+    
+
+    def takeAt(self, index):
+
+        if 0 <= index < len(self.item_list):
+
+            return self.item_list.pop(index)
+
+        return None
+
+    
+
+    def sizeHint(self):
+
+        return self.minimumSize()
+
+    
+
+    def minimumSize(self):
+
+        size = QSize()
+
+        for item in self.item_list:
+
+            size = size.expandedTo(item.minimumSize())
+
+        return size
+
+    
+
+    def setGeometry(self, rect):
+
+        super().setGeometry(rect)
+
+        self._do_layout(rect)
+
+    
+
+    def _do_layout(self, rect):
+        """Layout items in a centered flow grid"""
+        if not self.item_list:
+            return
+        
+        spacing = 8
+        
+        # First pass: organize items into rows
+        rows = []
+        current_row = []
+        row_width = 0
+        
+        for item in self.item_list:
+            widget = item.widget()
+            if widget:
+                item_width = widget.sizeHint().width()
+                if current_row and row_width + item_width + spacing > rect.width():
+                    rows.append((current_row, row_width - spacing))
+                    current_row = []
+                    row_width = 0
+                current_row.append(item)
+                row_width += item_width + spacing
+        
+        if current_row:
+            rows.append((current_row, row_width - spacing))
+        
+        # Second pass: position items with centering
+        y = rect.y()
+        line_height = 0
+        
+        for row_items, row_width in rows:
+            x_offset = (rect.width() - row_width) // 2
+            x = rect.x() + x_offset
+            for item in row_items:
+                widget = item.widget()
+                if widget:
+                    item.setGeometry(QRect(QPoint(x, y), widget.sizeHint()))
+                    x += widget.sizeHint().width() + spacing
+                    line_height = max(line_height, widget.sizeHint().height())
+            y += line_height + spacing
+            line_height = 0
+
+class BeatSyncUltimate(QMainWindow):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle("BeatSync PRO")
+
+        self.setMinimumSize(1680, 960)
+
+        self.setMinimumSize(1680, 960)
+
+        self.setAcceptDrops(True)  # Enable drag & drop
+
+        self.presets = []
+
+        self.has_audio = False
+
+        self.audio_duration = 225
+
+        
+
+        self.audio_tracks = []
+
+        # EXCLUSIVE radio button group - prevents multiple selections
+
+        self.audio_button_group = QButtonGroup(self)
+
+        self.audio_button_group.setExclusive(True)
+
+        # EXCLUSIVE radio button group - prevents multiple selections
+
+        self.audio_button_group = QButtonGroup(self)
+
+        self.audio_button_group.setExclusive(True)
+
+        self.audio_button_group = QButtonGroup(self)
+
+        self.audio_button_group.setExclusive(True)
+
+        self.video_clips = []
+
+        self.selected_audio = None
+
+        self.project_aspect_ratio = None  # Lock to first video's aspect ratio
+
+        # License/API state (set by startup code)
+        self.dev_mode = False
+        self.api = None
+
+        
+
+        self.setup_ui()
+
+        self.apply_theme()
+
+    
+
+    def setup_ui(self):
+
+        self.setMenuBar(None)
+
+        
+
+        central = QWidget()
+
+        self.setCentralWidget(central)
+
+        
+
+        main = QVBoxLayout(central)
+
+        main.setContentsMargins(0, 0, 0, 0)
+
+        main.setSpacing(0)
+
+        
+
+        main.addWidget(self.create_topaz_bar())
+
+        
+
+        content = QHBoxLayout()
+
+        content.setSpacing(0)
+
+        content.addWidget(self.create_left_panel())
+
+        content.addWidget(self.create_center_panel())
+
+        content.addWidget(self.create_right_panel())
+
+        main.addLayout(content, 1)
+
+
+
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+        # VIDEO GENERATION PROGRESS BAR (at bottom of window)
+
+        # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+        self.generation_progress = QProgressBar()
+
+        self.generation_progress.setVisible(False)
+
+        self.generation_progress.setTextVisible(True)
+
+        self.generation_progress.setFormat("%p%")
+
+        self.generation_progress.setFixedHeight(24)
+
+        self.generation_progress.setStyleSheet("""
+
+            QProgressBar {
+
+                border: none;
+
+                border-radius: 0px;
+
+                text-align: center;
+
+                background: #1a1a1a;
+
+                color: white;
+
+                font-size: 12px;
+
+                font-weight: bold;
+
+            }
+
+            QProgressBar::chunk {
+
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+
+                    stop:0 #00ff88, stop:1 #00cc66);
+
+            }
+
+        """)
+
+        main.addWidget(self.generation_progress)
+
+    
+
+    def create_topaz_bar(self):
+
+        bar = QWidget()
+
+        bar.setFixedHeight(56)
+
+        bar.setObjectName("topazBar")
+
+        
+
+        layout = QHBoxLayout(bar)
+
+        layout.setContentsMargins(8, 0, 20, 0)
+
+        layout.setSpacing(0)
+
+        
+
+        # FILE MENU
+
+        file_btn = QPushButton("File")
+
+        file_btn.setObjectName("menuBtn")
+
+        file_btn.setFixedHeight(56)
+
+        file_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        file_menu = QMenu(file_btn)
+
+        file_menu.addAction("Exit", self.close, "Ctrl+Q")
+
+        file_btn.setMenu(file_menu)
+
+        layout.addWidget(file_btn)
+
+        
+
+        # ACCOUNT MENU
+
+        account_btn = QPushButton("Account")
+
+        account_btn.setObjectName("menuBtn")
+
+        account_btn.setFixedHeight(56)
+
+        account_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        account_menu = QMenu(account_btn)
+
+        account_menu.addAction("View Credits", self.show_credits_dialog)
+
+        account_menu.addAction("Manage Subscription", self.open_subscription_portal)
+
+        account_menu.addSeparator()
+
+        account_menu.addAction("Sign Out", lambda: print("Signed out"))
+
+        account_btn.setMenu(account_menu)
+
+        layout.addWidget(account_btn)
+
+        
+
+        # HELP MENU
+
+        help_btn = QPushButton("Help")
+
+        help_btn.setObjectName("menuBtn")
+
+        help_btn.setFixedHeight(56)
+
+        help_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        help_menu = QMenu(help_btn)
+
+        help_menu.addAction("Quick Start Guide", self.show_quickstart)
+
+        help_menu.addAction("Join Discord", self.open_discord)
+
+        help_menu.addSeparator()
+
+        help_menu.addAction("About BeatSync PRO", self.show_about)
+
+        help_btn.setMenu(help_menu)
+
+        layout.addWidget(help_btn)
+
+        
+
+        layout.addStretch(1)
+
+        
+
+        # LOGO
+
+        brand_widget = QWidget()
+
+        brand_layout = QHBoxLayout(brand_widget)
+
+        brand_layout.setContentsMargins(0, 0, 0, 0)
+
+        brand_layout.setSpacing(10)
+
+        
+
+        logo_icon = BeatSyncLogo(28)
+
+        brand_layout.addWidget(logo_icon)
+
+        
+
+        brand_name = QLabel("BeatSync PRO")
+
+        brand_name.setStyleSheet(f"""
+
+            font-size: 16px;
+
+            font-weight: 700;
+
+            color: {ProColors.TEXT_PRIMARY};
+
+            letter-spacing: 0.5px;
+
+        """)
+
+        brand_layout.addWidget(brand_name)
+
+        
+
+        layout.addWidget(brand_widget)
+
+        layout.addStretch(1)
+
+        
+
+        # CREDITS + ACCOUNT
+
+        self.cred_label = QLabel("Credits: ∞")
+
+        self.cred_label.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {ProColors.GREEN_SUCCESS};")
+
+        layout.addWidget(self.cred_label)
+
+        
+
+        self.account_user_btn = QPushButton("Developer")
+
+        self.account_user_btn.setObjectName("accountBtn")
+
+        self.account_user_btn.setFixedHeight(32)
+
+        layout.addWidget(self.account_user_btn)
+
+        
+
+        return bar
+
+    
+
+    def create_left_panel(self):
+
+        """PROFESSIONAL LEFT PANEL - PERFECT LAYOUT"""
+
+        panel = QWidget()
+
+        panel.setFixedWidth(340)  # FIX: Even wider to fully show text
+
+        panel.setObjectName("leftPanel")
+
+        
+
+        panel_layout = QVBoxLayout(panel)
+
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+
+        panel_layout.setSpacing(0)
+
+        
+
+        scroll = QScrollArea()
+
+        scroll.setWidgetResizable(True)
+
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        scroll.setObjectName("leftScroll")
+
+        
+
+        content = QWidget()
+
+        content.setObjectName("leftContent")
+
+        layout = QVBoxLayout(content)
+
+        layout.setContentsMargins(14, 18, 14, 20)
+
+        layout.setSpacing(16)
+
+        
+
+        # AUDIO SECTION
+
+        audio_header = QLabel("AUDIO TRACKS")
+
+        audio_header.setStyleSheet(f"""
+
+            font-size: 10px; font-weight: 700; color: {ProColors.TEXT_TERTIARY}; letter-spacing: 1.2px;
+
+        """)
+
+        layout.addWidget(audio_header)
+
+        
+
+        self.audio_btn = QPushButton("+ Import Audio")
+
+        self.audio_btn.setObjectName("importBtn")
+
+        self.audio_btn.setFixedHeight(42)
+
+        self.audio_btn.clicked.connect(self.import_audio)
+
+        layout.addWidget(self.audio_btn)
+
+        
+
+        # FIXED: Wrap audio container in fixed-height frame to prevent expansion
+        audio_wrapper = QFrame()
+        audio_wrapper.setFixedHeight(85)  # Single track height - compact but readable  # Lock height - prevents panel expansion!
+        wrapper_layout = QVBoxLayout(audio_wrapper)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.setSpacing(0)
+        
+        # Scroll area inside the fixed wrapper
+        self.audio_scroll = QScrollArea()
+        self.audio_scroll.setWidgetResizable(True)
+        self.audio_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.audio_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.audio_scroll.setStyleSheet(f"QScrollArea {{ border: none; background: {ProColors.BG_DEEP}; }} QScrollArea > QWidget > QWidget {{ background: {ProColors.BG_DEEP}; }}")
+        
+        self.audio_container = QWidget()
+        self.audio_layout = QVBoxLayout(self.audio_container)
+        self.audio_layout.setContentsMargins(0, 0, 0, 0)
+        self.audio_layout.setSpacing(8)
+        self.audio_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        self.audio_empty = QLabel("No audio tracks imported")
+        self.audio_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.audio_empty.setStyleSheet(f"color: {ProColors.TEXT_DIM}; font-size: 11px; padding: 20px 0;")
+        self.audio_layout.addWidget(self.audio_empty)
+        
+        self.audio_scroll.setWidget(self.audio_container)
+        wrapper_layout.addWidget(self.audio_scroll)
+        layout.addWidget(audio_wrapper)
+
+        
+
+        # DIVIDER
+
+        line = QFrame()
+
+        line.setFrameShape(QFrame.Shape.HLine)
+
+        line.setStyleSheet(f"background: {ProColors.DIVIDER}; max-height: 1px; margin: 6px 0;")
+
+        layout.addWidget(line)
+
+        
+
+        # VIDEO SECTION
+
+        video_header_layout = QHBoxLayout()
+
+        
+
+        video_header = QLabel("VIDEO CLIPS")
+
+        video_header.setStyleSheet(audio_header.styleSheet())
+
+        video_header_layout.addWidget(video_header)
+
+        
+
+        self.video_count_label = QLabel("0/300")
+
+        self.video_count_label.setStyleSheet(f"font-size: 10px; color: {ProColors.TEXT_DIM};")
+
+        video_header_layout.addStretch()
+
+        video_header_layout.addWidget(self.video_count_label)
+
+        # Aspect ratio warning label
+        self.aspect_warning_label = QLabel('')
+        self.aspect_warning_label.setStyleSheet('font-size: 11px; color: #ff6b6b; font-weight: bold;')
+        self.aspect_warning_label.hide()
+
+        
+
+        layout.addLayout(video_header_layout)
+
+        
+
+        video_btn = QPushButton("+ Import Videos")
+
+        video_btn.setObjectName("importBtn")
+
+        video_btn.setFixedHeight(42)
+
+        video_btn.clicked.connect(self.import_videos)
+
+        layout.addWidget(video_btn)
+        layout.addWidget(self.aspect_warning_label)
+
+        
+
+        # Multi-select controls
+
+        select_row = QHBoxLayout()
+
+        select_row.setSpacing(8)
+
+        
+
+        self.select_all_videos_btn = QPushButton("Select All")
+
+        self.select_all_videos_btn.setFixedHeight(32)
+
+        self.select_all_videos_btn.setStyleSheet("""
+
+            QPushButton {
+
+                background: #3a3a3a;
+
+                color: #aaa;
+
+                border: 1px solid #555;
+
+                border-radius: 4px;
+
+                padding: 0 12px;
+
+                font-size: 11px;
+
+            }
+
+            QPushButton:hover { background: #4a4a4a; color: white; }
+
+        """)
+
+        self.select_all_videos_btn.clicked.connect(self.select_all_videos)
+
+        select_row.addWidget(self.select_all_videos_btn)
+
+        
+
+        self.delete_selected_videos_btn = QPushButton("🗑 Delete Selected")
+
+        self.delete_selected_videos_btn.setFixedHeight(32)
+
+        self.delete_selected_videos_btn.setStyleSheet("""
+
+            QPushButton {
+
+                background: #5a2a2a;
+
+                color: #ff6666;
+
+                border: 1px solid #ff4444;
+
+                border-radius: 4px;
+
+                padding: 0 12px;
+
+                font-size: 11px;
+
+            }
+
+            QPushButton:hover { background: #ff4444; color: white; }
+
+        """)
+
+        self.delete_selected_videos_btn.clicked.connect(self.delete_selected_videos)
+
+        select_row.addWidget(self.delete_selected_videos_btn)
+
+        
+
+        layout.addLayout(select_row)
+
+        
+
+        # THUMBNAIL GRID
+
+        self.video_container = QWidget()
+
+        self.video_container.setMinimumHeight(100)
+
+        self.video_layout = FlowLayout(self.video_container)
+
+        
+
+        # # Empty state label removed for cleaner UI  # Removed - not needed
+
+        
+
+        layout.addWidget(self.video_container)
+
+        
+
+        layout.addStretch()
+
+        
+
+        scroll.setWidget(content)
+
+        panel_layout.addWidget(scroll)
+
+        
+
+        return panel
+
+    
+
+    def create_center_panel(self):
+
+        panel = QWidget()
+
+        panel.setObjectName("centerPanel")
+
+        
+
+        layout = QVBoxLayout(panel)
+
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        layout.setSpacing(10)
+
+        
+
+        # VLC player for smooth playback
+        self.vlc_instance = vlc.Instance('--no-xlib')
+        self.vlc_player = self.vlc_instance.media_player_new()
+        
+        # Timer for updating position/duration during VLC playback
+        self.vlc_timer = QTimer()
+        self.vlc_timer.setInterval(200)  # Update 5x per second
+        self.vlc_timer.timeout.connect(self._update_vlc_position)
+        
+        # Create frame to embed VLC
+        from PySide6.QtWidgets import QFrame
+        video = QFrame()
+
+        video.setMinimumHeight(600)
+
+        video.setObjectName("videoPreview")
+
+
+
+        # Video player for preview (optimized)
+
+        self.video_widget = video
+
+        # Store video frame reference
+        self.video_widget = video
+        self.vlc_widget_id = None  # Will be set when widget is shown
+        
+        layout.addWidget(video, 7)
+
+        
+
+        controls = self.create_controls()
+
+        layout.addWidget(controls)
+
+        
+
+        timeline = QLabel("Timeline â€¢ Waveform â€¢ Beat Markers\n(Appears during generation)")
+
+        # Real waveform widget
+
+        self.waveform = WaveformWidget()
+
+        self.waveform.setMinimumHeight(200)
+
+        self.waveform.setObjectName("timelinePreview")
+
+        layout.addWidget(self.waveform, 3)
+
+        
+
+        return panel
+
+    
+
+    def create_controls(self):
+
+        controls = QWidget()
+
+        controls.setFixedHeight(60)
+
+        controls.setObjectName("playerControls")
+
+        
+
+        layout = QHBoxLayout(controls)
+
+        layout.setContentsMargins(10, 8, 10, 8)
+
+        
+
+        self.play_btn = QPushButton("▶")
+
+        self.play_btn.setFixedSize(44, 44)
+
+        self.play_btn.setObjectName("playBtn")
+
+        self.play_btn.setStyleSheet("font-size: 24px;")
+
+        layout.addWidget(self.play_btn)
+
+        self.play_btn.clicked.connect(self.toggle_playback)
+
+        
+
+        slider = QSlider(Qt.Orientation.Horizontal)
+
+        self.time_slider = slider
+
+        slider.sliderMoved.connect(self.seek_position)
+
+        self.time_slider = slider
+
+        slider.sliderMoved.connect(self.seek_position)
+
+        slider.setObjectName("timeSlider")
+
+        layout.addWidget(slider, 1)
+
+        
+
+        time_label = QLabel("0:00 / 0:00")
+
+        self.time_label = time_label
+
+        self.time_label = time_label
+
+        time_label.setStyleSheet(f"color: {ProColors.TEXT_SECONDARY}; font-family: 'Consolas', monospace; font-size: 11px;")
+
+        layout.addWidget(time_label)
+
+        
+
+        return controls
+
+
+
+    def toggle_playback(self):
+        """Toggle VLC playback"""
+        if not hasattr(self, "vlc_player"):
+            return
+        try:
+            state = self.vlc_player.get_state()
+            if state == vlc.State.Ended:
+                if hasattr(self, 'current_video_path') and self.current_video_path:
+                    self.vlc_player.stop()
+                    self.vlc_player.play()
+                    self.play_btn.setText(chr(9208))
+                    self.vlc_timer.start()
+                return
+            if self.vlc_player.is_playing():
+                self.vlc_player.pause()
+                self.play_btn.setText(chr(9654))
+                self.vlc_timer.stop()
+            else:
+                self.vlc_player.play()
+                self.play_btn.setText(chr(9208))
+                self.vlc_timer.start()
+        except Exception as e:
+            print(f"[PLAYER ERROR] Toggle: {e}")
+
+    def play_video_file(self, video_path):
+        """Play video using embedded VLC player"""
+        import sys
+        print(f"[PLAYER] Playing: {video_path}")
+        try:
+            if hasattr(self, 'vlc_player'):
+                self.vlc_player.stop()
+                self.vlc_timer.stop()
+            self.current_video_path = video_path
+            if sys.platform == "win32":
+                self.vlc_player.set_hwnd(int(self.video_widget.winId()))
+            media = self.vlc_instance.media_new(video_path)
+            self.vlc_player.set_media(media)
+            self.vlc_player.play()
+            self.play_btn.setText(chr(9208))
+            self.vlc_timer.start()
+        except Exception as e:
+            print(f"[PLAYER ERROR] {e}")
+
+    def _update_vlc_position(self):
+        """Update timeline from VLC player state"""
+        if not hasattr(self, 'vlc_player'):
+            return
+        try:
+            length_ms = self.vlc_player.get_length()
+            time_ms = self.vlc_player.get_time()
+            
+            if length_ms > 0:
+                if hasattr(self, 'time_slider'):
+                    pos = int((time_ms / length_ms) * 1000)
+                    self.time_slider.blockSignals(True)
+                    self.time_slider.setRange(0, 1000)
+                    self.time_slider.setValue(pos)
+                    self.time_slider.blockSignals(False)
+                
+                if hasattr(self, 'time_label'):
+                    cur_s = time_ms // 1000
+                    tot_s = length_ms // 1000
+                    self.time_label.setText(f"{cur_s // 60}:{cur_s % 60:02d} / {tot_s // 60}:{tot_s % 60:02d}")
+            
+            if not self.vlc_player.is_playing() and time_ms > 0:
+                self.vlc_timer.stop()
+                self.play_btn.setText("▶")
+        except:
+            pass
+
+    def update_position(self, position):
+
+        """Update slider and time label during playback (throttled for performance)"""
+
+        # Only update UI every 250ms to reduce lag
+
+        if not hasattr(self, '_last_position_update'):
+
+            self._last_position_update = 0
+
+        
+
+        import time
+
+        now = time.time() * 1000
+
+        if now - self._last_position_update < 250:  # 4 updates per second max
+
+            return
+
+        self._last_position_update = now
+
+        
+
+        if hasattr(self, 'time_slider'):
+
+            self.time_slider.blockSignals(True)
+
+            self.time_slider.setValue(position)
+
+            self.time_slider.blockSignals(False)
+
+        if hasattr(self, 'time_label'):
+
+            current = self.format_time(position)
+
+            total = self.format_time(self.media_player.duration()) if hasattr(self, 'media_player') else "0:00"
+
+            self.time_label.setText(f"{current} / {total}")
+
+    
+
+    def update_duration(self, duration):
+
+        """Update slider range when video loads"""
+
+        if hasattr(self, 'time_slider'):
+
+            self.time_slider.setRange(0, duration)
+
+    
+
+    def seek_position(self, position):
+
+        """Seek to position when slider moved"""
+
+        if hasattr(self, 'media_player'):
+
+            self.media_player.setPosition(position)
+
+    
+
+    def format_time(self, ms):
+
+        """Format milliseconds to M:SS"""
+
+        seconds = ms // 1000
+
+        minutes = seconds // 60
+
+        seconds = seconds % 60
+
+        return f"{minutes}:{seconds:02d}"
+
+    
+
+    def on_playback_state_changed(self, state):
+
+        """Handle playback state changes"""
+
+        if state == QMediaPlayer.PlaybackState.StoppedState:
+
+            self.play_btn.setText("▶")
+
+            if hasattr(self, 'time_slider'):
+
+                self.time_slider.setValue(0)
+
+        elif state == QMediaPlayer.PlaybackState.PlayingState:
+
+            self.play_btn.setText("⏸")
+
+        elif state == QMediaPlayer.PlaybackState.PausedState:
+
+            self.play_btn.setText("▶")
+
+    
+
+    def on_playback_state_changed(self, state):
+
+        """Handle playback state changes"""
+
+        if state == QMediaPlayer.PlaybackState.StoppedState:
+
+            self.play_btn.setText("▶")
+
+            if hasattr(self, 'time_slider'):
+
+                self.time_slider.setValue(0)
+
+        elif state == QMediaPlayer.PlaybackState.PlayingState:
+
+            self.play_btn.setText("⏸")
+
+        elif state == QMediaPlayer.PlaybackState.PausedState:
+
+            self.play_btn.setText("▶")
+
+    
+
+    def _update_lip_cost(self):
+
+        """Update lip sync cost estimate - 10 credits per second"""
+
+        if not self.lip_checkbox.isChecked():
+
+            self.lip_cost_label.setText("Disabled")
+
+            return
+
+        max_clips = self.lip_max_spin.value()
+
+        # Estimate: avg 5 sec per clip * 10 credits/sec
+
+        est_credits = max_clips * 5 * 10
+
+        self.lip_cost_label.setText(f"Est: ~{est_credits} credits ({max_clips} clips)")
+
+
+
+    def _animate_gen_btn(self):
+        """Animate the Generate Video button gradient"""
+        if not hasattr(self, 'gen_btn') or not self.gen_btn.isEnabled():
+            return
+        
+        # Phase goes from 0 to 100 and back
+        self._gen_btn_phase = (self._gen_btn_phase + 2) % 200
+        
+        # Calculate gradient position (oscillates 0 -> 1 -> 0)
+        if self._gen_btn_phase <= 100:
+            pos = self._gen_btn_phase / 100.0
+        else:
+            pos = (200 - self._gen_btn_phase) / 100.0
+        
+        # Colors: Cyan (#4A9EFF) to Purple (#9B59B6)
+        # Interpolate for smooth transition
+        c1 = "#4A9EFF"  # Cyan
+        c2 = "#9B59B6"  # Purple
+        
+        # Create shifting gradient
+        self.gen_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {c1},
+                    stop:{max(0.01, pos - 0.3):.2f} {c1},
+                    stop:{pos:.2f} {c2},
+                    stop:{min(0.99, pos + 0.3):.2f} {c1},
+                    stop:1 {c1});
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: 700;
+                letter-spacing: 0.3px;
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5BAEFF,
+                    stop:0.5 #AB69C6,
+                    stop:1 #5BAEFF);
+            }}
+            QPushButton:disabled {{
+                background: #3A404A;
+                color: #6B7280;
+            }}
+        """)
+
+    def generate_video(self):
+
+        """🎬 THREADED VIDEO GENERATION"""
+
+        try:
+
+            if not hasattr(self, 'audio_tracks') or not self.audio_tracks:
+                return  # Silently skip if no audio
+
+            if not hasattr(self, 'video_clips') or not self.video_clips:
+                return  # Silently skip if no video
+
+            # Check online status (REQUIRED)
+            if not self._check_online_status():
+                return
+
+            selected_audio = None
+
+            for track in self.audio_tracks:
+
+                if hasattr(track, 'radio') and track.radio.isChecked():
+
+                    selected_audio = track.filename
+
+                    break
+
+            
+
+            if not selected_audio:
+
+                QMessageBox.warning(self, "No Audio Selected", "Please select an audio track!")
+
+                return
+
+            
+
+            print("\n🎬 STARTING VIDEO GENERATION...")
+
+            
+
+            # Disable button and change to orange
+
+            self.gen_btn.setEnabled(False)
+
+            self.gen_btn.setText("🎬 Rendering...")
+
+            self.gen_btn.setStyleSheet("""
+
+                QPushButton {
+
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+
+                        stop:0 #4A9EFF, stop:1 #3A8EEF);
+
+                    color: white;
+
+                    font-size: 16px;
+
+                    font-weight: bold;
+
+                    border: none;
+
+                    border-radius: 8px;
+
+                }
+
+            """)
+
+            
+
+            # Show progress bar in UI
+
+            if hasattr(self, 'generation_progress'):
+
+                self.generation_progress.setVisible(True)
+
+                self.generation_progress.setValue(0)
+
+                self.generation_progress.setFormat("0% - Starting...")
+
+            
+
+            # Get lip sync settings from UI
+
+            lip_sync_enabled = False  # Lip sync removed for launch if hasattr(self, "lip_checkbox") else False
+
+            lip_sync_quality = "standard" if lip_sync_enabled else "local"
+
+            lip_sync_max = self.lip_max_spin.value() if hasattr(self, "lip_max_spin") else 5
+
+            print(f"[LIP SYNC] Enabled: {lip_sync_enabled}, Quality: {lip_sync_quality}, Max: {lip_sync_max}")
+
+            
+
+            self.worker = VideoGenerationWorker(selected_audio, self.video_clips,
+
+                                               self.preset_selector if hasattr(self, "preset_selector") else None,
+
+                                               lip_sync_quality, lip_sync_max)
+
+            self.worker.progress_update.connect(self.on_generation_progress)
+
+            self.worker.finished_success.connect(self.on_generation_success)
+
+            self.worker.finished_error.connect(self.on_generation_error)
+
+            self.worker.start()
+
+            
+
+        except Exception as e:
+
+            print(f"âŒ ERROR: {e}")
+
+            import traceback
+
+            traceback.print_exc()
+
+    
+
+
+
+    def _check_online_status(self):
+        """Check if internet connection is available"""
+        print("[DEBUG] _check_online_status called")
+        import urllib.request
+        try:
+            urllib.request.urlopen("https://resilient-appreciation-production-5e49.up.railway.app/health", timeout=5)
+            print("[OK] Online")
+            return True
+        except Exception as e:
+            print(f"[OFFLINE] No internet: {e}")
+            try:
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Connection Required")
+                msg.setText("Internet Connection Required")
+                msg.setInformativeText("BeatSync PRO requires an active internet connection to generate videos.\n\nPlease connect to the internet and try again.")
+                msg.setIcon(QMessageBox.Warning)
+                msg.setStyleSheet("""
+                    QMessageBox {
+                        background-color: #1a1a2e;
+                    }
+                    QMessageBox QLabel {
+                        color: #ffffff;
+                        font-size: 14px;
+                    }
+                    QPushButton {
+                        background-color: #00d4aa;
+                        color: #000000;
+                        border: none;
+                        padding: 8px 24px;
+                        font-weight: bold;
+                        border-radius: 4px;
+                        min-width: 80px;
+                    }
+                    QPushButton:hover {
+                        background-color: #00f5c4;
+                    }
+                """)
+                msg.exec_()
+            except Exception as dialog_err:
+                print(f"[ERROR] Dialog failed: {dialog_err}")
+            return False
+
+    def on_generation_error(self, error_message):
+
+        print(f"\nâŒ GENERATION FAILED: {error_message}")
+
+        # Error popup removed - using console message only
+
+        
+
+        if hasattr(self, 'worker'):
+
+            self.worker.deleteLater()
+
+            self.worker = None
+
+
+
+
+
+    def on_generation_progress(self, value, message):
+
+        if hasattr(self, 'generation_progress'):
+
+            self.generation_progress.setValue(value)
+
+            self.generation_progress.setFormat(f"{value}% - {message}")
+
+        print(f"   [{value}%] {message}")
+
+    
+
+
+
+    def on_generation_success(self, output_path):
+
+        """Handle successful video generation"""
+
+        print(f"\nâœ… VIDEO COMPLETE: {output_path}")
+
+        
+
+        # Re-enable button and change back to green
+
+        if hasattr(self, "gen_btn"):
+
+            self.gen_btn.setEnabled(True)
+
+            self.gen_btn.setText("Generate Video")
+
+            self.gen_btn.setStyleSheet("")  # Reset to default green
+
+        
+
+        # Hide progress bar
+
+        if hasattr(self, 'generation_progress'):
+
+            self.generation_progress.setVisible(False)
+
+        
+
+        # Add to finished videos list
+
+        if hasattr(self, 'finished_videos'):
+
+            self.finished_videos.add_video(output_path)
+
+        
+
+        # Clean up worker
+
+        if hasattr(self, 'worker'):
+
+            self.worker.deleteLater()
+
+            self.worker = None
+
+
+
+
+
+    def on_generation_error(self, error_message):
+
+        if hasattr(self, 'progress') and self.progress:
+
+            self.progress.close()
+
+        
+
+        print(f"\nâŒ ERROR: {error_message}")
+
+        
+
+        # Re-enable button on error
+
+        if hasattr(self, "gen_btn"):
+
+            self.gen_btn.setEnabled(True)
+
+            self.gen_btn.setText("Generate Video")
+
+            self.gen_btn.setStyleSheet("")  # Reset to default green
+
+        # Error popup removed - using console message only
+
+        
+
+        if hasattr(self, 'worker'):
+
+            self.worker.deleteLater()
+
+            self.worker = None
+
+
+
+
+
+    def on_generation_error(self, error_message):
+
+        print(f"\nâŒ ERROR: {error_message}")
+
+        
+
+        # Re-enable button on error
+
+        if hasattr(self, "gen_btn"):
+
+            self.gen_btn.setEnabled(True)
+
+            self.gen_btn.setText("Generate Video")
+
+            self.gen_btn.setStyleSheet("")  # Reset to default green
+
+        # Error popup removed - using console message only
+
+        if hasattr(self, 'worker'):
+
+            self.worker.deleteLater()
+
+            self.worker = None
+
+
+
+
+
+
+
+    def on_generation_error(self, error_message):
+
+        """Handle error"""
+
+        if hasattr(self, 'progress') and self.progress and False:  # Disabled
+
+            self.progress.close()
+
+        
+
+        print(f"âŒ ERROR: {error_message}")
+
+        # Error popup removed - using console message only
+
+        
+
+        if hasattr(self, 'worker'):
+
+            self.worker.deleteLater()
+
+            self.worker = None
+
+
+
+
+
+    def create_right_panel(self):
+
+        panel = QWidget()
+
+        panel.setFixedWidth(340)
+
+        panel.setObjectName("rightPanel")
+
+        
+
+        panel_layout = QVBoxLayout(panel)
+
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+
+        panel_layout.setSpacing(0)
+
+        
+
+        scroll = QScrollArea()
+
+        scroll.setWidgetResizable(True)
+
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        scroll.setObjectName("rightScroll")
+
+        
+
+        content = QWidget()
+
+        content.setObjectName("rightContent")
+
+        
+
+        layout = QVBoxLayout(content)
+
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        layout.setSpacing(12)
+
+        
+
+        header = QLabel("AI Director")
+
+        header.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {ProColors.TEXT_PRIMARY};")
+
+        layout.addWidget(header)
+
+
+
+        self.preset_selector = CompactPresetSelector()
+
+        layout.addWidget(self.preset_selector)
+
+
+
+        settings_label = QLabel("PROJECT SETTINGS")
+
+        settings_label.setStyleSheet(f"font-size: 10px; font-weight: 700; color: {ProColors.TEXT_TERTIARY}; letter-spacing: 1.2px;")
+
+        settings_label.setContentsMargins(0, 10, 0, 0)
+
+        layout.addWidget(settings_label)
+
+        
+
+        self.resolution_info = ResolutionInfoWidget()
+
+        self.resolution_info.setStyleSheet(f"""
+
+            background: {ProColors.BG_ELEVATED}; border: 1px solid {ProColors.BORDER}; border-radius: 6px;
+
+        """)
+
+        layout.addWidget(self.resolution_info)
+
+
+
+        self.gen_btn = QPushButton("Generate Video")
+
+        self.gen_btn.setFixedHeight(48)
+
+        self.gen_btn.setObjectName("generateBtn")
+
+        self.gen_btn.clicked.connect(self.generate_video)
+
+        self.gen_btn.setContentsMargins(0, 10, 0, 0)
+        
+        # Animated gradient for Generate button
+        self._gen_btn_phase = 0
+        self._gen_btn_timer = QTimer()
+        self._gen_btn_timer.timeout.connect(self._animate_gen_btn)
+        self._gen_btn_timer.start(50)  # 20 FPS animation
+
+        layout.addWidget(self.gen_btn)
+
+        
+
+        self.cost_widget = PremiumCostWidget()
+
+        layout.addWidget(self.cost_widget)
+
+
+
+        # Finished videos list
+
+        self.finished_videos = FinishedVideosWidget()
+
+        self.finished_videos.video_play_requested = self.play_video_file
+
+        layout.addWidget(self.finished_videos)
+        
+        # Track metadata panel
+        self.track_metadata = TrackMetadataWidget()
+        layout.addWidget(self.track_metadata)
+
+        layout.addStretch()
+
+        
+
+        scroll.setWidget(content)
+
+        panel_layout.addWidget(scroll)
+
+        
+
+        return panel
+
+    
+
+    def select_preset(self, selected):
+
+        for card in self.presets:
+
+            card.setChecked(card == selected)
+
+    
+
+    def update_cost(self):
+
+        model = self.lip_combo.currentData()
+
+        credits = CreditCalculator.calculate(self.audio_duration, model)
+
+        breakdown = CreditCalculator.get_breakdown(model)
+
+        
+
+        self.cost_widget.update_cost(credits, breakdown)
+
+    
+
+
+
+    # ================================================================
+
+    # DIALOG METHODS
+
+    # ================================================================
+
+    
+
+    def show_credits_dialog(self):
+
+        """Show account credits with professional styling."""
+
+        message = """CURRENT BALANCE: 47 credits
+
+
+
+CREDIT COSTS:
+
+  â€¢ AI Clip Analysis: 1 credit per clip
+
+  â€¢ Video Processing: 5 credits per video
+
+
+
+SUBSCRIPTION TIERS:
+
+  â€¢ Starter: $49/month = 5,000 credits
+
+  â€¢ Pro: $149/month = 15,000 credits
+
+  â€¢ Business: $499/month = 50,000 credits
+
+  â€¢ Enterprise: $999/month = 150,000 credits
+
+
+
+Need more credits? Upgrade your subscription!"""
+
+        
+
+        beatsync_dialogs.show_credits_dialog(self)
+
+    
+
+    def open_subscription_portal(self):
+
+        """Open Paddle subscription portal."""
+
+        import webbrowser
+
+        webbrowser.open("https://beatsyncpro.ai/account")
+
+        print("Opening subscription..."); webbrowser.open("https://beatsyncpro.ai/subscription")
+
+    
+
+    def show_quickstart(self):
+
+        """Show Quick Start Guide."""
+
+        message = """STEP 1: Import Your Music
+
+  Click '+ Import Audio' button
+
+  Supports: MP3, WAV, FLAC
+
+
+
+STEP 2: Add Video Clips
+
+  Click '+ Import Videos' button
+
+  Add 10-20 clips (3-10 seconds each)
+
+
+
+STEP 3: Customize (Optional)
+
+  Adjust settings in AI Director panel
+
+  Choose editing style and effects
+
+
+
+STEP 4: Generate Your Video!
+
+  Click 'Generate Video' button
+
+  AI creates beat-synced masterpiece
+
+
+
+COST: 1 credit/clip + 5 credits processing
+
+OUTPUT: MP4 in ~/Videos/BeatSync PRO/"""
+
+        
+
+        beatsync_dialogs.show_quickstart_dialog(self)
+
+    
+
+    def open_discord(self):
+
+        """Open Discord community."""
+
+        import webbrowser
+
+        webbrowser.open("https://discord.gg/sSukQyXA")
+
+        print("Opening Discord..."); webbrowser.open("https://discord.gg/sSukQyXA")
+
+    
+
+    def show_about(self):
+
+        """Show About BeatSync PRO."""
+
+        message = """BeatSync PRO v1.0
+
+AI-Powered Music Video Director
+
+
+
+Created by Christopher Wheeler
+
+RendereelStudio LLC
+
+Gresham, Oregon, USA
+
+
+
+Patent Pending
+
+Trademark Pending
+
+
+
+Copyright Â© 2025 RendereelStudio LLC
+
+All rights reserved.
+
+
+
+Email: beatsyncpro.official@gmail.com
+
+Website: beatsyncpro.ai
+
+Discord: discord.gg/sSukQyXA"""
+
+        
+
+        beatsync_dialogs.show_about_dialog(self)
+
+
+
+    # ================================================================
+
+    # DIALOG METHODS
+
+    # ================================================================
+
+    
+
+    def show_credits_dialog(self):
+
+        """Show account credits with professional styling."""
+
+        message = """CURRENT BALANCE: 47 credits
+
+
+
+CREDIT COSTS:
+
+  â€¢ AI Clip Analysis: 1 credit per clip
+
+  â€¢ Video Processing: 5 credits per video
+
+
+
+SUBSCRIPTION TIERS:
+
+  â€¢ Starter: $49/month = 5,000 credits
+
+  â€¢ Pro: $149/month = 15,000 credits
+
+  â€¢ Business: $499/month = 50,000 credits
+
+  â€¢ Enterprise: $999/month = 150,000 credits
+
+
+
+Need more credits? Upgrade your subscription!"""
+
+        
+
+        beatsync_dialogs.show_credits_dialog(self)
+
+    
+
+    def open_subscription_portal(self):
+
+        """Open Paddle subscription portal."""
+
+        import webbrowser
+
+        webbrowser.open("https://beatsyncpro.ai/account")
+
+        print("Opening subscription..."); webbrowser.open("https://beatsyncpro.ai/subscription")
+
+    
+
+    def show_quickstart(self):
+
+        """Show Quick Start Guide."""
+
+        message = """STEP 1: Import Your Music
+
+  Click '+ Import Audio' button
+
+  Supports: MP3, WAV, FLAC
+
+
+
+STEP 2: Add Video Clips
+
+  Click '+ Import Videos' button
+
+  Add 10-20 clips (3-10 seconds each)
+
+
+
+STEP 3: Customize (Optional)
+
+  Adjust settings in AI Director panel
+
+  Choose editing style and effects
+
+
+
+STEP 4: Generate Your Video!
+
+  Click 'Generate Video' button
+
+  AI creates beat-synced masterpiece
+
+
+
+COST: 1 credit/clip + 5 credits processing
+
+OUTPUT: MP4 in ~/Videos/BeatSync PRO/"""
+
+        
+
+        beatsync_dialogs.show_quickstart_dialog(self)
+
+    
+
+    def open_discord(self):
+
+        """Open Discord community."""
+
+        import webbrowser
+
+        webbrowser.open("https://discord.gg/sSukQyXA")
+
+        print("Opening Discord..."); webbrowser.open("https://discord.gg/sSukQyXA")
+
+    
+
+    def show_about(self):
+
+        """Show About BeatSync PRO."""
+
+        message = """BeatSync PRO v1.0
+
+AI-Powered Music Video Director
+
+
+
+Created by Christopher Wheeler
+
+RendereelStudio LLC
+
+Gresham, Oregon, USA
+
+
+
+Patent Pending
+
+Trademark Pending
+
+
+
+Copyright Â© 2025 RendereelStudio LLC
+
+All rights reserved.
+
+
+
+Email: beatsyncpro.official@gmail.com
+
+Website: beatsyncpro.ai
+
+Discord: discord.gg/sSukQyXA"""
+
+        
+
+        beatsync_dialogs.show_about_dialog(self)
+
+
+
+    # ================================================================
+
+    # DIALOG METHODS
+
+    # ================================================================
+
+    
+
+    def show_credits_dialog(self):
+
+        """Show account credits with professional styling."""
+
+        message = """CURRENT BALANCE: 47 credits
+
+
+
+CREDIT COSTS:
+
+  â€¢ AI Clip Analysis: 1 credit per clip
+
+  â€¢ Video Processing: 5 credits per video
+
+
+
+SUBSCRIPTION TIERS:
+
+  â€¢ Starter: $49/month = 5,000 credits
+
+  â€¢ Pro: $149/month = 15,000 credits
+
+  â€¢ Business: $499/month = 50,000 credits
+
+  â€¢ Enterprise: $999/month = 150,000 credits
+
+
+
+Need more credits? Upgrade your subscription!"""
+
+        
+
+        beatsync_dialogs.show_credits_dialog(self)
+
+    
+
+    def open_subscription_portal(self):
+
+        """Open Paddle subscription portal."""
+
+        import webbrowser
+
+        webbrowser.open("https://beatsyncpro.ai/account")
+
+        print("Opening subscription..."); webbrowser.open("https://beatsyncpro.ai/subscription")
+
+    
+
+    def show_quickstart(self):
+
+        """Show Quick Start Guide."""
+
+        message = """STEP 1: Import Your Music
+
+  Click '+ Import Audio' button
+
+  Supports: MP3, WAV, FLAC
+
+
+
+STEP 2: Add Video Clips
+
+  Click '+ Import Videos' button
+
+  Add 10-20 clips (3-10 seconds each)
+
+
+
+STEP 3: Customize (Optional)
+
+  Adjust settings in AI Director panel
+
+  Choose editing style and effects
+
+
+
+STEP 4: Generate Your Video!
+
+  Click 'Generate Video' button
+
+  AI creates beat-synced masterpiece
+
+
+
+COST: 1 credit/clip + 5 credits processing
+
+OUTPUT: MP4 in ~/Videos/BeatSync PRO/"""
+
+        
+
+        beatsync_dialogs.show_quickstart_dialog(self)
+
+    
+
+    def open_discord(self):
+
+        """Open Discord community."""
+
+        import webbrowser
+
+        webbrowser.open("https://discord.gg/sSukQyXA")
+
+        print("Opening Discord..."); webbrowser.open("https://discord.gg/sSukQyXA")
+
+    
+
+    def show_about(self):
+
+        """Show About BeatSync PRO."""
+
+        message = """BeatSync PRO v1.0
+
+AI-Powered Music Video Director
+
+
+
+Created by Christopher Wheeler
+
+RendereelStudio LLC
+
+Gresham, Oregon, USA
+
+
+
+Patent Pending
+
+Trademark Pending
+
+
+
+Copyright Â© 2025 RendereelStudio LLC
+
+All rights reserved.
+
+
+
+Email: beatsyncpro.official@gmail.com
+
+Website: beatsyncpro.ai
+
+Discord: discord.gg/sSukQyXA"""
+
+        
+
+        beatsync_dialogs.show_about_dialog(self)
+
+
+
+    def import_audio(self):
+
+        # Disable button during file dialog
+
+        if hasattr(self, 'audio_btn'):
+
+            self.audio_btn.setEnabled(False)
+
+            self.audio_btn.setText("📂 Opening...")
+
+            self.audio_btn.setStyleSheet("""
+
+                QPushButton {
+
+                    background: #4A9EFF;
+
+                    color: white;
+
+                }
+
+            """)
+
+        
+
+        file, _ = QFileDialog.getOpenFileName(
+
+            self,
+
+            "Import Audio Track",
+
+            "",
+
+            "Audio Files (*.mp3 *.wav *.m4a *.flac);;All Files (*.*)"
+
+        )
+
+        files = [file] if file else []
+
+        
+
+        # Re-enable button
+
+        if hasattr(self, 'audio_btn'):
+
+            self.audio_btn.setEnabled(True)
+
+            self.audio_btn.setText("+ Import Audio")
+
+            self.audio_btn.setStyleSheet("")  # Reset
+
+        
+
+        if files:
+
+            if self.audio_empty:
+
+                self.audio_empty.deleteLater()
+
+                self.audio_empty = None
+
+            
+
+            rejected_videos = []
+            
+            for file_path in files:
+                filename = os.path.basename(file_path)
+
+                duration = "3:45"
+
+                bpm = "80.7"
+
+                
+
+                card = AudioTrackCard(file_path, duration, bpm)
+
+                card.selected.connect(self.on_audio_selected)
+
+                card.deleted.connect(self.on_audio_deleted)
+
+                
+
+                self.audio_tracks.append(card)
+
+                self.audio_layout.addWidget(card)
+
+                
+
+                if len(self.audio_tracks) == 1:
+
+                    card.radio.setChecked(True)
+
+    
+
+    def import_videos(self):
+
+        files, _ = QFileDialog.getOpenFileNames(
+
+            self,
+
+            "Import Video Clips",
+
+            "",
+
+            "Video Files (*.mp4 *.mov *.avi *.mkv);;All Files (*.*)"
+
+        )
+
+        
+
+        if files:
+
+            # video_empty removed
+
+            
+
+            rejected_videos = []
+            
+            for file_path in files:
+                filename = os.path.basename(file_path)
+                duration = '8.2s'
+                resolution = '1920x1080'
+                
+                # Check aspect ratio
+                try:
+                    import cv2
+                    cap = cv2.VideoCapture(file_path)
+                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    cap.release()
+                    resolution = f'{width}x{height}'
+                    video_aspect = '16:9' if width > height else '9:16'
+                    
+                    if self.project_aspect_ratio is None:
+                        self.project_aspect_ratio = video_aspect
+                        print(f'[ASPECT] Auto-detected: {self.project_aspect_ratio} ({width}x{height})')
+                    
+                    if video_aspect != self.project_aspect_ratio:
+                        print(f'[ASPECT] REJECTED: {video_aspect} != {self.project_aspect_ratio}')
+                        rejected_videos.append(filename)
+                        continue
+                    print(f'[ASPECT] OK: {video_aspect}')
+                except Exception as e:
+                    print(f'[ASPECT] Error: {e}')
+                
+                thumb = VideoThumbnail(file_path, duration, resolution)
+                thumb.toggled.connect(self.on_video_toggled)
+                thumb.deleted.connect(self.on_video_deleted)
+                self.video_clips.append(thumb)
+                self.video_layout.addWidget(thumb)
+            
+            # Show warning for rejected videos
+            if rejected_videos:
+                self.aspect_warning_label.setText(f'WARNING: {len(rejected_videos)} video(s) rejected - {self.project_aspect_ratio} required')
+                self.aspect_warning_label.show()
+            else:
+                self.aspect_warning_label.hide()
+            
+            self.video_count_label.setText(f"{len(self.video_clips)}/300")
+
+            self.resolution_info.update_clips({'count': len(self.video_clips), 'aspect': self.project_aspect_ratio or 'Not Set'})
+
+            
+
+            # FORCE MINIMUM HEIGHT - Each thumbnail ~200px tall in 2 columns
+
+            num_clips = len(self.video_clips)
+
+            rows_needed = (num_clips + 1) // 2  # 2 columns
+
+            min_height = rows_needed * 210  # 200px thumb + 10px spacing
+
+            self.video_container.setMinimumHeight(min_height)
+
+            print(f"[SCROLL] Set container min height to {min_height}px for {num_clips} clips ({rows_needed} rows)")
+
+            
+
+            # QMessageBox.information(
+
+            # self,
+
+            # "Import Complete",
+
+            # f"Imported {len(files)} videos!\n\nTotal videos: {num_clips}/300\n\nNeed more? Click 'Import Videos' again!"
+
+            # )
+
+    
+
+    def on_audio_selected(self, card):
+
+        """Handle audio track selection and load waveform data with beat detection"""
+
+        # Show loading state
+
+        if hasattr(self, 'audio_btn'):
+
+            self.audio_btn.setText("🎵 Loading Track...")
+
+            self.audio_btn.setEnabled(False)
+
+            QApplication.processEvents()
+
+        
+
+        # DESELECT all other tracks (only ONE selected at a time)
+
+        for other_card in self.audio_tracks:
+
+            if other_card != card and hasattr(other_card, 'radio'):
+
+                other_card.radio.blockSignals(True)
+
+                other_card.radio.setChecked(False)
+
+                other_card.radio.blockSignals(False)
+
+        
+
+        self.selected_audio = card
+
+        
+
+        # Load audio file and display waveform
+
+        try:
+
+            import librosa
+
+            import numpy as np
+
+            from core.audio_analyzer import AudioAnalyzer
+
+            
+
+            print(f"\n🎵 Loading audio with beat detection...")
+
+            
+
+            # Load audio data for waveform
+
+            audio_data, sample_rate = librosa.load(card.filename, sr=44100, mono=True)
+
+            
+
+            # Send to waveform widget
+
+            self.waveform.set_audio_data(audio_data, sample_rate)
+
+            
+
+            print(f"[âœ“] Waveform loaded: {card.filename}")
+
+            print(f"    Duration: {len(audio_data)/sample_rate:.2f}s, Samples: {len(audio_data)}")
+
+            
+
+            # Detect beats using AudioAnalyzer
+
+            print(f"🎵 Detecting beats...")
+
+            analyzer = AudioAnalyzer()
+
+            analysis_dict = analyzer.analyze_music(card.filename)
+
+            
+
+            # Convert dict to object structure that WaveformWidget expects
+
+            class BeatAnalysis:
+
+                def __init__(self, analysis_dict):
+
+                    self.tempo = analysis_dict['bpm']
+
+                    self.duration = analysis_dict['duration']
+
+                    self.sections = analysis_dict.get('sections', [])
+
+                    
+
+                    # Convert beat times to beat objects with downbeat detection
+
+                    beat_times = analysis_dict['beats']
+
+                    beats_per_bar = 4  # Assume 4/4 time
+
+                    
+
+                    self.beats = []
+
+                    for i, beat_time in enumerate(beat_times):
+
+                        beat_obj = type('Beat', (), {
+
+                            'time': beat_time,
+
+                            'is_downbeat': i % beats_per_bar == 0
+
+                        })()
+
+                        self.beats.append(beat_obj)
+
+            
+
+            beat_analysis = BeatAnalysis(analysis_dict)
+
+            
+
+            # Send beat data to waveform
+
+            self.waveform.set_beat_data(beat_analysis)
+
+            
+
+            print(f"[âœ“] Beat markers loaded: {len(beat_analysis.beats)} beats, {len([b for b in beat_analysis.beats if b.is_downbeat])} downbeats")
+
+            # Update track metadata panel
+            if hasattr(self, "track_metadata"):
+                self.track_metadata.update_from_analysis(analysis_dict)
+
+
+
+            # Reset button to show success
+
+            if hasattr(self, 'audio_btn'):
+
+                self.audio_btn.setText("+ Import Audio")
+
+                self.audio_btn.setEnabled(True)
+
+                self.audio_btn.setStyleSheet("")
+
+            
+
+        except Exception as e:
+
+            print(f"[!] Waveform/beat load failed: {e}")
+
+            import traceback
+
+            traceback.print_exc()
+
+    def on_audio_deleted(self, card):
+
+        self.audio_tracks.remove(card)
+
+        card.deleteLater()
+
+        
+
+        if not self.audio_tracks:
+
+            self.audio_empty = QLabel("No audio tracks imported")
+
+            self.audio_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            self.audio_empty.setStyleSheet(f"color: {ProColors.TEXT_DIM}; font-size: 11px; padding: 20px 0;")
+
+            self.audio_layout.addWidget(self.audio_empty)
+
+    
+
+    def on_video_toggled(self, thumb, checked):
+
+        # Track selection state for multi-delete
+
+        thumb._selected = checked
+
+    
+
+    def on_video_deleted(self, thumb):
+
+        # If this thumb is selected, delete ALL selected videos
+
+        if getattr(thumb, '_selected', False):
+
+            selected = [t for t in self.video_clips if getattr(t, '_selected', False)]
+
+            print(f"[DELETE] Removing {len(selected)} selected videos via X button...")
+
+            for t in selected:
+
+                self.video_clips.remove(t)
+
+                t.deleteLater()
+
+        else:
+
+            self.video_clips.remove(thumb)
+
+            thumb.deleteLater()
+
+        
+
+        self.video_count_label.setText(f"{len(self.video_clips)}/300")
+
+        self.select_all_videos_btn.setText("Select All")
+
+
+
+    def select_all_videos(self):
+
+        """Toggle select all/deselect all videos"""
+
+        if not self.video_clips:
+
+            return
+
+        
+
+        # Check if any are selected
+
+        any_selected = any(getattr(t, '_selected', False) for t in self.video_clips)
+
+        
+
+        for thumb in self.video_clips:
+
+            thumb._selected = not any_selected
+
+            if thumb._selected:
+
+                thumb.setStyleSheet(thumb.styleSheet() + "border: 2px solid #ff4444;")
+
+            else:
+
+                thumb.setStyleSheet(thumb.styleSheet().replace("border: 2px solid #ff4444;", ""))
+
+        
+
+        self.select_all_videos_btn.setText("Deselect All" if not any_selected else "Select All")
+
+        print(f"[SELECT] {'Selected' if not any_selected else 'Deselected'} all {len(self.video_clips)} videos")
+
+
+
+    def delete_selected_videos(self):
+
+        """Delete all selected videos"""
+
+        selected = [t for t in self.video_clips if getattr(t, '_selected', False)]
+
+        if not selected:
+
+            print("[DELETE] No videos selected")
+
+            return
+
+        
+
+        print(f"[DELETE] Removing {len(selected)} selected videos...")
+
+        
+
+        for thumb in selected:
+
+            self.video_clips.remove(thumb)
+
+            thumb.deleteLater()
+
+        
+
+        self.video_count_label.setText(f"{len(self.video_clips)}/300")
+
+        self.select_all_videos_btn.setText("Select All")
+
+        print(f"[DELETE] Done! {len(self.video_clips)} videos remaining")
+
+
+
+    def delete_all_audio(self):
+
+        """Delete all audio tracks"""
+
+        if not self.audio_tracks:
+
+            return
+
+        
+
+        print(f"[DELETE] Removing {len(self.audio_tracks)} audio tracks...")
+
+        
+
+        for card in self.audio_tracks[:]:
+
+            card.deleteLater()
+
+        
+
+        self.audio_tracks.clear()
+
+        
+
+        self.audio_empty = QLabel("No audio tracks imported")
+
+        self.audio_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.audio_empty.setStyleSheet(f"color: {ProColors.TEXT_DIM}; font-size: 11px; padding: 20px 0;")
+
+        self.audio_layout.addWidget(self.audio_empty)
+
+        
+
+        if hasattr(self, 'waveform') and self.waveform:
+
+            self.waveform.audio_data = None
+
+            self.waveform.beat_analysis = None
+
+            self.waveform.update()
+
+        
+
+        print("[DELETE] All audio cleared")
+
+
+
+    # ========================================
+
+    # DRAG & DROP HANDLERS
+
+    # ========================================
+
+    
+
+    def dragEnterEvent(self, event):
+
+        """Accept drag events with files"""
+
+        if event.mimeData().hasUrls():
+
+            event.acceptProposedAction()
+
+    
+
+    def dropEvent(self, event):
+
+        """Handle dropped files"""
+
+        urls = event.mimeData().urls()
+
+        if not urls:
+
+            return
+
+        
+
+        audio_files = []
+
+        video_files = []
+
+        
+
+        for url in urls:
+
+            file_path = url.toLocalFile()
+
+            ext = os.path.splitext(file_path)[1].lower()
+
+            
+
+            # Check if it's audio
+
+            if ext in ['.mp3', '.wav', '.m4a', '.flac']:
+
+                audio_files.append(file_path)
+
+            # Check if it's video
+
+            elif ext in ['.mp4', '.mov', '.avi', '.mkv']:
+
+                video_files.append(file_path)
+
+        
+
+        # Import audio files
+
+        if audio_files:
+
+            self._import_audio_files(audio_files)
+
+        
+
+        # Import video files
+
+        if video_files:
+
+            self._import_video_files(video_files)
+
+        
+
+        event.acceptProposedAction()
+
+    
+
+    def _import_audio_files(self, files):
+
+        """Helper to import audio files - ONLY ONE TRACK ALLOWED"""
+
+        print(f"[AUDIO] Clearing {len(self.audio_tracks)} existing tracks...")
+
+        
+
+        # FORCE clear ALL existing audio tracks
+
+        while self.audio_layout.count() > 0:
+
+            item = self.audio_layout.takeAt(0)
+
+            if item.widget():
+
+                item.widget().hide()
+
+                item.widget().deleteLater()
+
+        
+
+        self.audio_tracks.clear()
+
+        self.audio_empty = None
+
+        
+
+        # Only import FIRST file (one track only!)
+
+        if not files:
+
+            return
+
+        file_path = files[0]
+
+        print(f"[AUDIO] Loading SINGLE track: {file_path}")
+
+        
+
+        files = [file_path]
+
+        for file_path in files:
+
+            filename = os.path.basename(file_path)
+
+            duration = "3:45"
+
+            bpm = 128
+
+            
+
+            card = AudioTrackCard(file_path, duration, bpm)
+
+            card.selected.connect(self.on_audio_selected)
+
+            card.deleted.connect(self.on_audio_deleted)
+
+            
+
+            # Add to exclusive button group
+
+            self.audio_button_group.addButton(card.radio)
+
+            
+
+            self.audio_tracks.append(card)
+
+            self.audio_layout.addWidget(card)
+
+            
+
+            # Auto-select the only track
+
+            self.on_audio_selected(card)
+
+        
+
+            # QMessageBox.information(
+
+            # self,
+
+            # "Import Complete",
+
+            # f"Imported {len(files)} audio track(s)!\n\nDrag & drop works!"
+
+            # )
+
+    
+
+    def _import_video_files(self, files):
+
+        """Helper to import video files (used by both dialog and drag-drop)"""
+
+        # video_empty removed
+
+        
+
+        import cv2
+
+        
+
+        for file_path in files:
+
+            # Detect aspect ratio
+
+            cap = cv2.VideoCapture(file_path)
+
+            if cap.isOpened():
+
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+                cap.release()
+
+                
+
+                aspect = "16:9" if width > height else "9:16"
+
+                
+
+                # Lock to first video's aspect ratio
+
+                if self.project_aspect_ratio is None:
+
+                    self.project_aspect_ratio = aspect
+
+                    print(f"[ASPECT] Project locked to {aspect}")
+
+                
+
+                # Reject mismatched videos
+
+                elif self.project_aspect_ratio != aspect:
+
+                    QMessageBox.warning(
+
+                        self,
+
+                        "Aspect Ratio Mismatch",
+
+                        f"âš ï¸ Video is {aspect} but project is locked to {self.project_aspect_ratio}.\n\n" +
+
+                        f"Skipping: {os.path.basename(file_path)}\n\n" +
+
+                        f"Clear all videos to switch aspect ratios."
+
+                    )
+
+                    continue
+
+            filename = os.path.basename(file_path)
+
+            duration = "8.2s"
+
+            resolution = "1920x1080"
+
+            
+
+            thumb = VideoThumbnail(file_path, duration, resolution)
+
+            thumb.toggled.connect(self.on_video_toggled)
+
+            thumb.deleted.connect(self.on_video_deleted)
+
+            
+
+            self.video_clips.append(thumb)
+
+            self.video_layout.addWidget(thumb)
+
+
+
+            # Auto-detect aspect ratio from first video
+
+            if len(self.video_clips) == 1:
+
+                try:
+
+                    import cv2
+
+                    cap = cv2.VideoCapture(file_path)
+
+                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+
+                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+                    cap.release()
+
+                    if width > height:
+
+                        self.project_aspect_ratio = '16:9'
+
+                    else:
+
+                        self.project_aspect_ratio = '9:16'
+
+                    print(f'[ASPECT] Auto-detected: {self.project_aspect_ratio} ({width}x{height})')
+
+                except Exception as e:
+
+                    print(f'[ASPECT] Could not detect: {e}')
+
+        
+
+        self.video_count_label.setText(f"{len(self.video_clips)}/300")
+
+        self.resolution_info.update_clips({'count': len(self.video_clips), 'aspect': self.project_aspect_ratio or 'Not Set'})
+
+        
+
+        num_clips = len(self.video_clips)
+
+        rows_needed = (num_clips + 1) // 2
+
+        min_height = rows_needed * 210
+
+        self.video_container.setMinimumHeight(min_height)
+
+        
+
+            # QMessageBox.information(
+
+            # self,
+
+            # "Import Complete",
+
+            # f"Imported {len(files)} videos!\n\nTotal: {num_clips}/300\n\nDrag & drop works!"
+
+            # )
+
+        
+
+        if not self.video_clips:
+
+            # # Empty state label removed for cleaner UI  # Removed - not needed
+
+            self.video_empty.show()
+
+            
+
+            self.resolution_info.update_clips({'count': 0, 'aspect': 'Not Set'})
+
+    
+
+    def apply_theme(self):
+
+        self.setStyleSheet(f"""
+
+            QMainWindow {{ background: {ProColors.BG_DEEP}; }}
+
+            QWidget {{ color: {ProColors.TEXT_PRIMARY}; font-family: -apple-system, "Segoe UI", sans-serif; font-size: 13px; }}
+
+            
+
+            QScrollBar:vertical {{ background: {ProColors.BG_SURFACE}; width: 8px; border-radius: 4px; }}
+
+            QScrollBar::handle:vertical {{ background: {ProColors.BORDER}; border-radius: 4px; min-height: 30px; }}
+
+            QScrollBar::handle:vertical:hover {{ background: {ProColors.TEXT_DIM}; }}
+
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; }}
+
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
+
+            
+
+            #topazBar {{ background: {ProColors.BG_SURFACE}; border-bottom: 1px solid {ProColors.BORDER}; }}
+
+            #menuBtn {{ background: transparent; color: {ProColors.TEXT_SECONDARY}; border: none; padding: 0 16px; font-size: 13px; font-weight: 500; }}
+
+            #menuBtn:hover {{ background: {ProColors.BG_ELEVATED}; color: {ProColors.TEXT_PRIMARY}; }}
+
+            #menuBtn::menu-indicator {{ image: none; }}
+
+            
+
+            QMenu {{ background: {ProColors.BG_ELEVATED}; border: 1px solid {ProColors.BORDER}; padding: 4px; }}
+
+            QMenu::item {{ padding: 8px 24px; border-radius: 4px; }}
+
+            QMenu::item:selected {{ background: {ProColors.BLUE_PRIMARY}; }}
+
+            
+
+            #accountBtn {{ background: {ProColors.BG_ELEVATED}; border: 1px solid {ProColors.BORDER}; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 500; margin-left: 8px; }}
+
+            #accountBtn:hover {{ background: {ProColors.BG_INPUT}; border-color: {ProColors.BLUE_PRIMARY}; }}
+
+            
+
+            #leftPanel, #rightPanel {{ background: {ProColors.BG_SURFACE}; }}
+
+            #leftPanel {{ border-right: 1px solid {ProColors.BORDER}; }}
+
+            #rightPanel {{ border-left: 1px solid {ProColors.BORDER}; }}
+
+            #centerPanel {{ background: {ProColors.BG_DEEP}; }}
+
+            #leftScroll, #rightScroll {{ border: none; background: {ProColors.BG_SURFACE}; }}
+
+            #leftContent, #rightContent {{ background: {ProColors.BG_SURFACE}; }}
+
+            
+
+            #videoPreview {{ background: #000000; border: 1px solid {ProColors.BORDER}; border-radius: 6px; }}
+
+            #playerControls {{ background: {ProColors.BG_SURFACE}; border: 1px solid {ProColors.BORDER}; border-radius: 6px; }}
+
+            #playBtn {{ background: {ProColors.BLUE_PRIMARY}; color: white; border: none; border-radius: 18px; font-size: 12px; font-weight: bold; }}
+
+            #playBtn:hover {{ background: {ProColors.BLUE_HOVER}; }}
+
+            #timeSlider::groove:horizontal {{ height: 4px; background: {ProColors.BG_INPUT}; border-radius: 2px; }}
+
+            #timeSlider::handle:horizontal {{ width: 12px; height: 12px; background: {ProColors.BLUE_PRIMARY}; border-radius: 6px; margin: -4px 0; }}
+
+            #timeSlider::sub-page:horizontal {{ background: {ProColors.BLUE_PRIMARY}; border-radius: 2px; }}
+
+            #timelinePreview {{ background: {ProColors.BG_SURFACE}; border: 1px solid {ProColors.BORDER}; border-radius: 6px; color: {ProColors.TEXT_DIM}; font-size: 11px; }}
+
+            
+
+            #importBtn {{ 
+
+                background: {ProColors.BG_ELEVATED}; 
+
+                border: 1px solid {ProColors.BORDER}; 
+
+                border-radius: 6px; 
+
+                font-weight: 600; 
+
+                font-size: 13px; 
+
+                padding: 11px 14px;
+
+            }}
+
+            #importBtn:hover {{ background: {ProColors.BG_INPUT}; border-color: {ProColors.BLUE_PRIMARY}; }}
+
+            
+
+            #deleteBtn {{ 
+
+                background: {ProColors.BG_ELEVATED}; 
+
+                border: 1px solid {ProColors.BORDER}; 
+
+                border-radius: 4px; 
+
+                font-size: 18px;
+
+                font-weight: bold;
+
+                color: {ProColors.TEXT_SECONDARY};
+
+            }}
+
+            #deleteBtn:hover {{ 
+
+                background: {ProColors.RED_DELETE}; 
+
+                border-color: {ProColors.RED_DELETE};
+
+                color: white;
+
+            }}
+
+            
+
+            #thumbDeleteBtn {{
+
+                background: rgba(0, 0, 0, 0.6);
+
+                border: 1px solid rgba(255, 255, 255, 0.2);
+
+                border-radius: 4px;
+
+                font-size: 14px;
+
+                font-weight: bold;
+
+                color: white;
+
+            }}
+
+            #thumbDeleteBtn:hover {{ background: {ProColors.RED_DELETE}; }}
+
+            
+
+            #generateBtn {{ 
+
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {ProColors.BLUE_PRIMARY}, stop:1 {ProColors.BLUE_DARK}); 
+
+                color: white; 
+
+                border: none; 
+
+                border-radius: 6px; 
+
+                font-size: 14px; 
+
+                font-weight: 700; 
+
+                letter-spacing: 0.3px; 
+
+            }}
+
+            #generateBtn:hover {{ background: {ProColors.BLUE_HOVER}; }}
+
+            
+
+            #audioCard {{ 
+
+                background: {ProColors.BG_ELEVATED}; 
+
+                border: 1px solid {ProColors.BORDER}; 
+
+                border-radius: 6px; 
+
+            }}
+
+            #audioCard:hover {{ border-color: {ProColors.BLUE_PRIMARY}; }}
+
+            
+
+            #videoThumb {{ background: transparent; }}
+
+            #thumbContainer {{ 
+
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
+
+                    stop:0 {ProColors.BG_ELEVATED}, 
+
+                    stop:1 {ProColors.BG_INPUT}); 
+
+                border: 1px solid {ProColors.BORDER}; 
+
+                border-radius: 6px; 
+
+            }}
+
+            
+
+            #thumbPlaceholder {{
+
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
+
+                    stop:0 {ProColors.BG_ELEVATED}, 
+
+                    stop:1 {ProColors.BG_INPUT});
+
+            }}
+
+            
+
+            #settingCombo {{ 
+
+                background: {ProColors.BG_INPUT}; 
+
+                border: 1px solid {ProColors.BORDER}; 
+
+                border-radius: 5px; 
+
+                padding: 7px 10px; 
+
+                font-size: 12px; 
+
+                font-weight: 500; 
+
+                color: {ProColors.TEXT_PRIMARY}; 
+
+            }}
+
+            #settingCombo:hover {{ border-color: {ProColors.BLUE_PRIMARY}; }}
+
+            #settingCombo::drop-down {{ border: none; padding-right: 8px; }}
+
+            #settingCombo QAbstractItemView {{ 
+
+                background: {ProColors.BG_INPUT}; 
+
+                border: 1px solid {ProColors.BORDER}; 
+
+                selection-background-color: {ProColors.BLUE_PRIMARY}; 
+
+                color: {ProColors.TEXT_PRIMARY}; 
+
+            }}
+
+            
+
+            #costWidget {{ 
+
+                background: {ProColors.BG_ELEVATED}; 
+
+                border: 1px solid {ProColors.BORDER}; 
+
+                border-radius: 8px; 
+
+            }}
+
+            
+
+            QCheckBox, QRadioButton {{ spacing: 8px; }}
+
+            QCheckBox::indicator, QRadioButton::indicator {{ 
+
+                width: 18px; 
+
+                height: 18px; 
+
+                border: 2px solid {ProColors.BORDER}; 
+
+                border-radius: 4px; 
+
+                background: {ProColors.BG_INPUT}; 
+
+            }}
+
+            QRadioButton::indicator {{ border-radius: 9px; }}
+
+            QCheckBox::indicator:checked, QRadioButton::indicator:checked {{ 
+
+                background: #0084FF;
+
+                border-color: #0084FF;
+
+            }}
+
+        """)
+
+
+
+if __name__ == "__main__":
+
+    import sys
+    import os
+    from pathlib import Path
+
+    # Fix Windows ASCII encoding for unicode in exceptions
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='backslashreplace')
+
+    # Check for dev mode
+    def is_dev_mode():
+        """Check if running in developer mode"""
+        # Check env var
+        if os.environ.get('BEATSYNC_DEV') == '1':
+            return True
+        # Check for .dev_mode file in app directory
+        app_dir = Path(__file__).parent.parent.parent
+        if (app_dir / '.dev_mode').exists():
+            return True
+        return False
+
+    app = QApplication(sys.argv)
+    
+    DEV_MODE = is_dev_mode()
+    
+    if DEV_MODE:
+        # Dev mode - skip license check
+        print("[DEV MODE] License check bypassed")
+        window = BeatSyncUltimate()
+        window.dev_mode = True
+        window.api = None
+        window.show()
+    else:
+        # Production mode - require license
+        try:
+            from src.core.api_client import BeatSyncAPI
+            from src.core.license_manager import LicenseManager
+            from src.core.license_dialog import LicenseDialog
+        except ImportError:
+            # Try relative import if running from different location
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from src.core.api_client import BeatSyncAPI
+            from src.core.license_manager import LicenseManager
+            from src.core.license_dialog import LicenseDialog
+        
+        api = BeatSyncAPI()
+        license_mgr = LicenseManager()
+        
+        # Check for saved license
+        saved_key = license_mgr.load_license()
+        license_valid = False
+        
+        if saved_key:
+            # Try to validate saved license
+            result = api.validate_license(saved_key)
+            if result.get("success"):
+                license_valid = True
+                print(f"[LICENSE] Valid license for {api.email}")
+        
+        if not license_valid:
+            # Show activation dialog
+            dialog = LicenseDialog(api, license_mgr)
+            if dialog.exec() != 1 or not dialog.was_validated():
+                # User cancelled or validation failed
+                print("[LICENSE] Activation required - exiting")
+                sys.exit(0)
+        
+        # License valid - launch app
+        window = BeatSyncUltimate()
+        window.dev_mode = False
+        window.api = api
+        window.show()
+    
+    sys.exit(app.exec())
+

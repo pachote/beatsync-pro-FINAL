@@ -1,0 +1,250 @@
+﻿"""
+BeatSync - Video Renderer with TWO-STAGE PRORES PIPELINE
+ZERO black frames guaranteed - Hollywood standard workflow
+"""
+
+import os
+import subprocess
+import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
+class VideoRenderer:
+    def __init__(self, output_dir="output"):
+        self.output_dir = output_dir
+        self.prores_dir = os.path.join(output_dir, "prores_intermediate")
+        os.makedirs(self.output_dir, exist_ok=True)
+        os.makedirs(self.prores_dir, exist_ok=True)
+
+    def render_music_video(self, edit_plan, music_path, final_output_path=None):
+        """Render using TWO-STAGE PRORES PIPELINE - ZERO black frames"""
+
+        print("="*60)
+        print("📹 VIDEO RENDERER - TWO-STAGE PRORES PIPELINE")
+        print("="*60)
+
+        clips = edit_plan.get('clips', [])
+
+        if not clips:
+            print("❌ No clips in edit plan!")
+            return None
+
+        print(f"   Total clips: {len(clips)}")
+        print(f"   Style: {edit_plan.get('aesthetic_style', 'N/A')}")
+        print(f"\n🎬 STAGE 1: Rendering clips to ProRes (parallel processing)...")
+
+        # STAGE 1: Render all clips to identical ProRes specs (PARALLEL)
+        prores_clips = []
+        
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {}
+            for i, clip_data in enumerate(clips):
+                future = executor.submit(
+                    self._render_clip_to_prores,
+                    clip_data, i
+                )
+                futures[future] = i
+
+            for future in as_completed(futures):
+                clip_index = futures[future]
+                try:
+                    prores_path = future.result()
+                    if prores_path:
+                        prores_clips.append((clip_index, prores_path))
+                        print(f"      ✅ Clip {clip_index+1}/{len(clips)} rendered")
+                except Exception as e:
+                    print(f"      ❌ Clip {clip_index+1} failed: {e}")
+
+        # Sort by original order
+        prores_clips.sort(key=lambda x: x[0])
+        prores_paths = [path for _, path in prores_clips]
+
+        if not prores_paths:
+            print("❌ No clips were processed successfully!")
+            return None
+
+        print(f"\n   ✅ Stage 1 complete: {len(prores_paths)} ProRes clips")
+
+        # STAGE 2: Seamless concatenation (all specs identical - ZERO black frames)
+        print(f"\n🎬 STAGE 2: Concatenating ProRes clips (seamless)...")
+        prores_master = self._concatenate_prores(prores_paths)
+
+        if not prores_master:
+            return None
+
+        print(f"   ✅ Stage 2 complete: ProRes master created")
+
+        # STAGE 3: Export to H.264 delivery format
+        print(f"\n🎬 STAGE 3: Exporting to H.264...")
+        
+        # Use user's chosen path if provided, otherwise use default
+        if not final_output_path:
+            final_output_path = os.path.join(self.output_dir, f"final_{os.urandom(4).hex()}.mp4")
+        
+        final_output = self._export_to_h264(prores_master, music_path, final_output_path)
+
+        if final_output:
+            # Cleanup ProRes intermediates
+            print(f"\n🧹 Cleaning up ProRes intermediates...")
+            try:
+                shutil.rmtree(self.prores_dir)
+                os.makedirs(self.prores_dir, exist_ok=True)
+            except:
+                pass
+
+            print("="*60)
+            print(f"✅ SUCCESS! Video saved to: {final_output}")
+            print("="*60)
+
+        return final_output
+
+    def _render_clip_to_prores(self, clip_data, clip_index):
+        print(f"[RENDERER DEBUG] Clip {clip_index}:")
+        print(f"  clip_data keys: {clip_data.keys()}")
+        print(f"  video_path: {clip_data.get('video_path', 'MISSING')}")
+        print(f"  File exists: {os.path.exists(clip_data.get('video_path', ''))}")
+        """STAGE 1: Render clip with effects to ProRes intermediate"""
+        
+        input_path = clip_data['video_path']
+        prores_output = os.path.join(self.prores_dir, f"prores_{clip_index:03d}.mov")
+        
+        effects = clip_data.get('effects', {})
+        filter_chain = effects.get('ffmpeg_filter', '')
+        trim_start = clip_data.get('trim_start', 0)
+        trim_end = clip_data.get('trim_end', 5)
+        duration = trim_end - trim_start
+
+        # Build FFmpeg command - CRITICAL: All ProRes clips must have IDENTICAL specs
+        cmd = [
+            'ffmpeg',
+            '-ss', str(trim_start),
+            '-i', input_path,
+            '-t', str(duration),
+        ]
+
+        # Apply effects if specified
+        if filter_chain:
+            cmd.extend(['-vf', filter_chain])
+
+        # CRITICAL: ProRes with IDENTICAL parameters for ALL clips
+        cmd.extend([
+            '-c:v', 'prores_ks',
+            '-profile:v', '2',  # ProRes 422
+            '-vendor', 'apl0',
+            '-pix_fmt', 'yuv422p10le',  # FIXED pixel format
+            '-r', '30',  # FIXED frame rate
+            '-video_track_timescale', '30000',  # FIXED timebase
+            '-c:a', 'pcm_s16le',  # FIXED audio codec
+            '-ar', '48000',  # FIXED audio sample rate
+            '-ac', '2',  # FIXED audio channels
+            '-y',
+            prores_output
+        ])
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=300)
+            
+            if result.returncode == 0 and os.path.exists(prores_output):
+                return prores_output
+            else:
+                # Retry without effects if it failed
+                if filter_chain:
+                    return self._render_clip_to_prores_no_effects(clip_data, clip_index)
+                return None
+                
+        except Exception as e:
+            print(f"      Error rendering clip {clip_index}: {e}")
+            return None
+
+    def _render_clip_to_prores_no_effects(self, clip_data, clip_index):
+        """Fallback: Render without effects"""
+        
+        input_path = clip_data['video_path']
+        prores_output = os.path.join(self.prores_dir, f"prores_{clip_index:03d}.mov")
+        
+        trim_start = clip_data.get('trim_start', 0)
+        trim_end = clip_data.get('trim_end', 5)
+        duration = trim_end - trim_start
+
+        cmd = [
+            'ffmpeg',
+            '-ss', str(trim_start),
+            '-i', input_path,
+            '-t', str(duration),
+            '-c:v', 'prores_ks',
+            '-profile:v', '2',
+            '-vendor', 'apl0',
+            '-pix_fmt', 'yuv422p10le',
+            '-r', '30',
+            '-video_track_timescale', '30000',
+            '-c:a', 'pcm_s16le',
+            '-ar', '48000',
+            '-ac', '2',
+            '-y',
+            prores_output
+        ]
+
+        try:
+            subprocess.run(cmd, capture_output=True, check=True, timeout=300)
+            return prores_output
+        except:
+            return None
+
+    def _concatenate_prores(self, prores_paths):
+        """STAGE 2: Concatenate ProRes clips - ZERO black frames guaranteed"""
+        
+        concat_list = os.path.join(self.prores_dir, "concat_list.txt")
+        
+        with open(concat_list, 'w') as f:
+            for prores_path in prores_paths:
+                abs_path = os.path.abspath(prores_path)
+                f.write(f"file '{abs_path}'\n")
+
+        prores_master = os.path.join(self.prores_dir, "master_prores.mov")
+
+        # CRITICAL: Using -c copy because ALL clips have IDENTICAL specs
+        # This is WHY there are no black frames - perfect spec matching!
+        cmd = [
+            'ffmpeg',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', concat_list,
+            '-c', 'copy',  # Safe to use copy - all specs identical!
+            '-y',
+            prores_master
+        ]
+
+        try:
+            subprocess.run(cmd, capture_output=True, check=True, timeout=300)
+            return prores_master
+        except Exception as e:
+            print(f"   ❌ Concatenation error: {e}")
+            return None
+
+    def _export_to_h264(self, prores_master, music_path, final_output_path):
+        """STAGE 3: Export ProRes master to H.264 with music"""
+        
+        cmd = [
+            'ffmpeg',
+            '-i', prores_master,
+            '-i', music_path,
+            '-c:v', 'libx264',
+            '-preset', 'medium',
+            '-crf', '18',  # Visually lossless quality
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-map', '0:v:0',
+            '-map', '1:a:0',
+            '-shortest',
+            '-movflags', '+faststart',
+            '-y',
+            final_output_path
+        ]
+
+        try:
+            subprocess.run(cmd, capture_output=True, check=True, timeout=600)
+            return final_output_path
+        except Exception as e:
+            print(f"   ❌ H.264 export error: {e}")
+            return None
+

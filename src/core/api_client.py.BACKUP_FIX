@@ -1,0 +1,105 @@
+"""
+BeatSync PRO - API Client
+Communicates with the credit server for license validation and credit management
+"""
+import requests
+import hashlib
+import uuid
+from typing import Optional, Dict, Any
+
+class BeatSyncAPI:
+    """API client for BeatSync PRO credit server"""
+    
+    def __init__(self):
+        self.base_url = "https://resilient-appreciation-production-5e49.up.railway.app"
+        self.license_key: Optional[str] = None
+        self.balance: int = 0
+        self.tier: Optional[str] = None
+        self.email: Optional[str] = None
+        self.subscription_status: Optional[str] = None
+        self.machine_id = self._get_machine_id()
+        
+    def _get_machine_id(self) -> str:
+        """Generate unique machine identifier"""
+        try:
+            import platform
+            import getpass
+            raw = f"{platform.node()}-{getpass.getuser()}-beatsync"
+            return hashlib.sha256(raw.encode()).hexdigest()[:32]
+        except:
+            return str(uuid.uuid4())[:32]
+    
+    def validate_license(self, license_key: str) -> Dict[str, Any]:
+        """Validate license key with server"""
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/v1/license/validate",
+                json={"license_key": license_key, "machine_id": self.machine_id},
+                timeout=10
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("valid"):
+                    self.license_key = license_key
+                    user = data.get("user", {})
+                    self.balance = user.get("credits_remaining", 0)
+                    self.tier = user.get("tier", "unknown")
+                    self.email = user.get("email", "")
+                    self.subscription_status = user.get("subscription_status", "unknown")
+                    return {"success": True, "data": data}
+                return {"success": False, "error": data.get("error", "Invalid license")}
+            try:
+                err = response.json().get("error", "Validation failed")
+            except:
+                err = f"Server error: {response.status_code}"
+            return {"success": False, "error": err}
+        except requests.exceptions.ConnectionError:
+            return {"success": False, "error": "No internet connection"}
+        except requests.exceptions.Timeout:
+            return {"success": False, "error": "Connection timeout"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def check_balance(self) -> Dict[str, Any]:
+        """Check current credit balance"""
+        if not self.license_key:
+            return {"success": False, "error": "No license key"}
+        try:
+            response = requests.get(
+                f"{self.base_url}/api/v1/credits/balance",
+                params={"license_key": self.license_key},
+                timeout=5
+            )
+            if response.status_code == 200:
+                data = response.json()
+                self.balance = data.get("credits_remaining", self.balance)
+                return {"success": True, "balance": self.balance}
+            return {"success": False, "error": "Failed to check balance"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def deduct_credits(self, amount: int, description: str = "Video generation") -> Dict[str, Any]:
+        """Deduct credits after generation"""
+        if not self.license_key:
+            return {"success": False, "error": "No license key"}
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/v1/credits/deduct",
+                json={
+                    "license_key": self.license_key,
+                    "amount": amount,
+                    "description": description
+                },
+                timeout=10
+            )
+            if response.status_code == 200:
+                data = response.json()
+                self.balance = data.get("credits_remaining", self.balance - amount)
+                return {"success": True, "balance": self.balance}
+            try:
+                err = response.json().get("error", "Deduction failed")
+            except:
+                err = f"Server error: {response.status_code}"
+            return {"success": False, "error": err}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

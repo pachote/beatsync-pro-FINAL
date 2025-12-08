@@ -1,0 +1,178 @@
+﻿"""
+BeatSync - Video Renderer (Intelligent Mode)
+Applies Claude's creative decisions directly
+"""
+
+import os
+import subprocess
+import random
+
+
+class VideoRenderer:
+    def __init__(self, output_dir="output"):
+        self.output_dir = output_dir
+        os.makedirs(output_dir, exist_ok=True)
+
+    def render_music_video(self, edit_plan, music_path):
+        """Render music video using Claude's intelligent decisions"""
+
+        print("="*60)
+        print("📹 VIDEO RENDERER - Applying AI Director's vision...")
+        print("="*60)
+
+        clips = edit_plan.get('clips', [])
+        
+        if not clips:
+            print("❌ No clips in edit plan!")
+            return None
+
+        print(f"   Total clips: {len(clips)}")
+        print(f"   Style: {edit_plan.get('aesthetic_style', 'N/A')}")
+
+        # Process each clip with Claude's chosen effects
+        processed_clips = []
+        
+        for i, clip_data in enumerate(clips):
+            print(f"   Processing clip {i+1}/{len(clips)}...")
+
+            # Get Claude's creative decision
+            effects = clip_data.get('effects', {})
+            ffmpeg_filter = effects.get('ffmpeg_filter', '')
+            reasoning = effects.get('creative_reasoning', 'N/A')
+            
+            if reasoning != 'N/A':
+                print(f"      💡 {reasoning[:80]}...")
+
+            # Apply Claude's filter
+            processed_path = self._apply_effects_to_clip(
+                clip_data['video_path'],
+                i,
+                ffmpeg_filter,
+                clip_data.get('trim_start', 0),
+                clip_data.get('trim_end', 5)
+            )
+
+            if processed_path:
+                processed_clips.append(processed_path)
+
+        if not processed_clips:
+            print("❌ No clips were processed successfully!")
+            return None
+
+        print(f"   ✅ Processed {len(processed_clips)} clips with intelligent effects")
+
+        # Concatenate
+        print("   Concatenating clips...")
+        concatenated = self._concatenate_clips(processed_clips)
+        
+        if not concatenated:
+            return None
+
+        # Add music
+        print("   Adding music...")
+        final_output = self._add_music(concatenated, music_path)
+
+        if final_output:
+            print("="*60)
+            print(f"✅ SUCCESS! AI-directed video saved to: {final_output}")
+            print("="*60)
+
+        return final_output
+
+    def _apply_effects_to_clip(self, input_path, clip_index, filter_chain, trim_start, trim_end):
+        """Apply Claude's intelligent filter decisions"""
+
+        output_path = os.path.join(self.output_dir, f"processed_{clip_index:03d}.mp4")
+
+        # Build FFmpeg command
+        cmd = [
+            'ffmpeg',
+            '-i', input_path,
+            '-ss', str(trim_start),
+            '-t', str(trim_end - trim_start),
+        ]
+
+        # Apply Claude's filter if provided
+        if filter_chain:
+            cmd.extend(['-vf', filter_chain])
+
+        cmd.extend([
+            '-c:v', 'libx264',
+            '-preset', 'medium',
+            '-crf', '20',
+            '-an',
+            '-y',
+            output_path
+        ])
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=300)
+            if result.returncode == 0:
+                return output_path
+            else:
+                print(f"      ⚠️  FFmpeg warning: {result.stderr[:150]}")
+                # Try without filter if it failed
+                if filter_chain:
+                    print(f"      🔄 Retrying without filter...")
+                    return self._apply_effects_to_clip(input_path, clip_index, '', trim_start, trim_end)
+                return output_path
+        except subprocess.TimeoutExpired:
+            print(f"      ❌ Timeout processing clip {clip_index}")
+            return None
+        except Exception as e:
+            print(f"      ❌ Error: {e}")
+            return None
+
+    def _concatenate_clips(self, clip_paths):
+        """Concatenate processed clips"""
+
+        concat_file = os.path.join(self.output_dir, "concat_list.txt")
+
+        with open(concat_file, 'w') as f:
+            for clip_path in clip_paths:
+                f.write(f"file '{os.path.abspath(clip_path)}'\n")
+
+        output_path = os.path.join(self.output_dir, "concatenated.mp4")
+
+        cmd = [
+            'ffmpeg',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', concat_file,
+            '-c', 'copy',
+            '-y',
+            output_path
+        ]
+
+        try:
+            subprocess.run(cmd, capture_output=True, check=True, timeout=300)
+            return output_path
+        except Exception as e:
+            print(f"   ❌ Concatenation error: {e}")
+            return None
+
+    def _add_music(self, video_path, music_path):
+        """Add music to video"""
+
+        final_path = os.path.join(self.output_dir, f"final_{os.urandom(4).hex()}.mp4")
+
+        cmd = [
+            'ffmpeg',
+            '-i', video_path,
+            '-i', music_path,
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-map', '0:v:0',
+            '-map', '1:a:0',
+            '-shortest',
+            '-y',
+            final_path
+        ]
+
+        try:
+            subprocess.run(cmd, capture_output=True, check=True, timeout=300)
+            return final_path
+        except Exception as e:
+            print(f"   ❌ Audio overlay error: {e}")
+            return None

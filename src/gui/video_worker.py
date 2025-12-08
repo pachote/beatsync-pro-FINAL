@@ -1,0 +1,298 @@
+# Video Generation Worker Thread
+import os
+from PySide6.QtCore import QThread, Signal
+from pathlib import Path
+
+class VideoGenerationWorker(QThread):
+    """Worker thread for video generation to keep UI responsive"""
+    progress_update = Signal(int, str)
+    finished_success = Signal(Path)
+    finished_error = Signal(str)
+
+    def __init__(self, audio_file, video_clips, preset_selector, lip_sync_quality="local", lip_sync_max_clips=5):
+        super().__init__()
+        self.audio_file = audio_file
+        self.video_clips = video_clips
+        self.preset_selector = preset_selector
+        self.lip_sync_quality = lip_sync_quality  # NEW: Lip sync setting
+        self.lip_sync_max_clips = lip_sync_max_clips
+        self.lip_sync_max_clips = lip_sync_max_clips
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
+
+    def run(self):
+        try:
+            self.progress_update.emit(10, "Loading modules...")
+
+            import sys
+            sys.path.insert(0, str(Path(__file__).parent.parent))
+            from core.audio_analyzer import AudioAnalyzer
+            from core.agi_director_intelligence import AGIDirectorIntelligence
+            from core.video_renderer import VideoRenderer
+            from core.agi_director_intelligence import ClipAnalysis
+            from core.editing_presets import EditingPreset
+            from core.agi_director_intelligence import BeatSegment
+            from datetime import datetime
+
+            if self._is_cancelled:
+                return
+
+            self.progress_update.emit(20, "Analyzing audio...")
+            analyzer = AudioAnalyzer()
+            audio_analysis = analyzer.analyze_music(self.audio_file)
+
+            if self._is_cancelled:
+                return
+
+            self.progress_update.emit(30, "Analyzing video clips...")
+            analyzed_clips = []
+
+            try:
+                from services.claude_vision_api import ClaudeVisionAPI
+                api = ClaudeVisionAPI()
+
+                for i, video_clip in enumerate(self.video_clips):
+                    if self._is_cancelled:
+                        return
+
+                    self.progress_update.emit(
+                        40 + int((i + 1) / len(self.video_clips) * 20),
+                        f"Analyzing clip {i+1}/{len(self.video_clips)}..."
+                    )
+
+                    clip = api.analyze_clip(
+                        video_path=video_clip.filename,
+                        duration=float(str(video_clip.duration).replace("s", "")),
+                        resolution=(1920, 1080),
+                        fps=30.0,
+                        codec="h264"
+                    )
+                    analyzed_clips.append(clip)
+            except Exception as e:
+                for video_clip in self.video_clips:
+                    clip = ClipAnalysis(
+                        video_path=video_clip.filename,
+                        duration=float(str(video_clip.duration).replace("s", "")),
+                        subject_type="person",
+                        has_faces=True,
+                        face_count=1,
+                        art_style="realistic",
+                        color_dominant="#FF5733",
+                        color_palette=["#FF5733", "#33FF57"],
+                        motion_intensity=5.0,
+                        composition="medium",
+                        energy_level=6.0,
+                        mood="energetic",
+                        resolution=(1920, 1080),
+                        fps=30.0,
+                        codec="h264"
+                    )
+                    analyzed_clips.append(clip)
+
+            if self._is_cancelled:
+                return
+
+            self.progress_update.emit(60, "Getting preferences...")
+
+            if hasattr(self.preset_selector, "current_selections"):
+                try:
+                    editing = self.preset_selector.current_selections["editing"]
+                    color = self.preset_selector.current_selections["color"]
+                    effects_tuples = self.preset_selector.get_backend_effects()
+                    effects = [e[0] for e in effects_tuples] if effects_tuples else ["Clean"]
+                except:
+                    editing, color, effects = "Balanced", "Natural", "Clean"
+            else:
+                editing, color, effects = "Balanced", "Natural", "Clean"
+
+            self.progress_update.emit(65, "Creating edit plan...")
+
+            beats = audio_analysis.get("beats", [])
+            beat_segments = []
+            
+            # Extract audio intelligence data
+            bass_drops = audio_analysis.get("frequencies", {}).get("bass_drops", [])
+            sections = audio_analysis.get("sections", [])
+            vocal_sections = audio_analysis.get("vocals", {}).get("vocal_sections", [])
+            bpm = audio_analysis.get("bpm", 120)
+            
+            for idx in range(len(beats) - 1):
+                beat_time = beats[idx]
+                
+                # DETECT DROPS: Is this beat near a bass drop?
+                is_drop = any(abs(beat_time - drop_time) < 0.2 for drop_time in bass_drops)
+                
+                # DETECT BUILD-UP: Is this beat in a build-up section?
+                is_buildup = False
+                for section in sections:
+                    if section.get('name') == 'build-up':
+                        if section['start'] <= beat_time <= section['end']:
+                            is_buildup = True
+                            break
+                
+                # DETECT VOCALS: Is this beat during vocals?
+                has_vocals = False
+                for vocal_start, vocal_end in vocal_sections:
+                    if vocal_start <= beat_time <= vocal_end:
+                        has_vocals = True
+                        break
+                
+                segment = BeatSegment(
+                    start_time=beats[idx],
+                    end_time=beats[idx + 1],
+                    duration=beats[idx + 1] - beats[idx],
+                    beat_index=idx,
+                    energy=audio_analysis.get("energy_curve", [0.6])[min(idx, len(audio_analysis.get("energy_curve", [])) - 1)],
+                    spectral_flux=0.5,
+                    is_drop=is_drop,
+                    is_buildup=is_buildup,
+                    has_vocals=has_vocals,
+                    tempo=bpm
+                )
+                beat_segments.append(segment)
+
+            preset_map = {
+                "Flash Cuts": "flash_cuts",
+                "Balanced": "balanced",
+                "Dynamic": "dynamic",
+                "Hypercut": "hypercut",
+                "EXTREME": "hypercut",
+                "Chill": "balanced"
+            }
+
+            editing_backend = preset_map.get(editing, "balanced")
+            preset_data = EditingPreset.get_preset(editing_backend)
+
+            preset = {
+                "editing": editing_backend,
+                "color": color,
+                "effects": effects,
+                "clip_mix": preset_data.get("clip_mix", {"short": 0.4, "medium": 0.4, "long": 0.2}),
+                "duration_range": preset_data.get("duration_range", (2.0, 4.0))
+            }
+
+            agi = AGIDirectorIntelligence(preset, audio_analysis)
+            edit_plan = agi.create_edit_plan(analyzed_clips, beat_segments, audio_analysis.get("duration", 30))
+
+            if self._is_cancelled:
+                return
+
+            # ================================================================
+            # LIP SYNC PROCESSING (NEW!)
+            # ================================================================
+            if self.lip_sync_quality != "local":
+                self.progress_update.emit(75, f"Processing lip sync ({self.lip_sync_quality})...")
+                
+                try:
+                    from core.lipsync_integration import LipSyncIntegration
+                    
+                    lip_sync = LipSyncIntegration(self.lip_sync_quality)
+                    
+                    if lip_sync.should_process():
+                        # Extract vocals from music
+                        self.progress_update.emit(76, "Extracting vocals...")
+                        vocals_path = lip_sync.extract_vocals(self.audio_file)
+                        
+                        if vocals_path:
+                            # Detect face clips
+                            self.progress_update.emit(77, "Detecting faces in clips...")
+                            clips_data = [{'path': c.video_path} for c in analyzed_clips]
+                            face_clips = lip_sync.detect_face_clips(clips_data)
+                            
+                            if face_clips:
+                                self.progress_update.emit(78, f"Processing {len(face_clips)} face clips...")
+                                
+                                # Process lip sync on face clips
+                                path_mapping = lip_sync.process_clips_batch(
+                                    face_clips,
+                                    vocals_path,
+                                    max_clips=10,
+                                    progress_callback=lambda p, m: self.progress_update.emit(78 + int(p * 0.07), m)
+                                )
+                                
+                                # DEBUG: Show path_mapping contents
+                                print(f"  [DEBUG] path_mapping has {len(path_mapping)} entries")
+                                for k, v in list(path_mapping.items())[:2]:
+                                    print(f"  [DEBUG] Key: {k[-60:]}")
+                                    print(f"  [DEBUG] Val: {v[-60:]}")
+                                
+                                # NORMALIZE paths for cross-platform comparison  
+                                normalized_mapping = {}
+                                for k, v in path_mapping.items():
+                                    normalized_mapping[os.path.normpath(k)] = v
+                                
+                                # Update edit_plan with NORMALIZED comparison
+                                updated_count = 0
+                                for clip in edit_plan:
+                                    orig_path = clip.get('video_path', '')
+                                    normalized_orig = os.path.normpath(orig_path)
+                                    if normalized_orig in normalized_mapping:
+                                        new_path = normalized_mapping[normalized_orig]
+                                        if os.path.normpath(new_path) != normalized_orig:
+                                            print(f"  [LIP SYNC] MATCH! Swapping: {os.path.basename(orig_path)}")
+                                            # Convert relative cache path to absolute
+                                            if not os.path.isabs(new_path):
+                                                project_root = Path(__file__).parent.parent.parent
+                                                new_path = str(project_root / new_path)
+                                            # Convert relative cache path to absolute
+                                            if not os.path.isabs(new_path):
+                                                project_root = Path(__file__).parent.parent.parent
+                                                new_path = str(project_root / new_path)
+                                            clip['video_path'] = new_path
+                                            clip['lip_synced'] = True
+                                            updated_count += 1
+                                
+                                # ALSO update analyzed_clips
+                                for aclip in analyzed_clips:
+                                    orig = os.path.normpath(str(aclip.video_path))
+                                    if orig in normalized_mapping:
+                                        new_path = normalized_mapping[orig]
+                                        if os.path.normpath(new_path) != orig:
+                                            aclip.video_path = new_path
+                                
+                                print(f"  [LIP SYNC] Updated {updated_count} clips in edit_plan")
+
+                            else:
+                                print("  [LIP SYNC] No face clips detected")
+                        else:
+                            print("  [LIP SYNC] Vocal extraction failed")
+                    else:
+                        print("  [LIP SYNC] API not available")
+                        
+                except ImportError as e:
+                    print(f"  [LIP SYNC] Module not available: {e}")
+                except Exception as e:
+                    print(f"  [LIP SYNC] Error: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            self.progress_update.emit(85, "Rendering video...")
+
+            output_dir = Path.home() / "Videos" / "BeatSync"
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = output_dir / f"beatsync_{timestamp}.mp4"
+
+            renderer = VideoRenderer()
+            edit_plan_formatted = {
+                "clips": edit_plan,
+                "color": color,
+                "effects": effects
+            }
+
+            renderer.render_music_video(edit_plan_formatted, self.audio_file, str(output_path))
+
+            if self._is_cancelled:
+                return
+
+            self.progress_update.emit(100, "Complete!")
+            self.finished_success.emit(output_path)
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.finished_error.emit(str(e))
+

@@ -1,0 +1,1236 @@
+﻿"""
+BEATSYNC PRO v15 - PROFESSIONAL PERFECTION
+Audio cards perfect, video thumbnails beautiful, nothing cut off
+"""
+
+from PySide6.QtWidgets import *
+from PySide6.QtCore import *
+from PySide6.QtGui import *
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PySide6.QtMultimediaWidgets import QVideoWidget
+import random
+import os
+
+class ProColors:
+    BG_DEEP = "#1A1D23"
+    BG_SURFACE = "#252932"
+    BG_ELEVATED = "#2D3139"
+    BG_INPUT = "#353B45"
+    BLUE_PRIMARY = "#4A9EFF"
+    BLUE_HOVER = "#5BAEFF"
+    BLUE_DARK = "#3B8EEF"
+    GREEN_SUCCESS = "#0ECB81"
+    AMBER_WARNING = "#F6B93B"
+    RED_DELETE = "#FF4757"
+    TEXT_PRIMARY = "#FFFFFF"
+    TEXT_SECONDARY = "#C5CBD3"
+    TEXT_TERTIARY = "#8F95A3"
+    TEXT_DIM = "#6B7280"
+    BORDER = "#3A404A"
+    DIVIDER = "#2F3541"
+
+class BeatSyncLogo(QWidget):
+    def __init__(self, size=28):
+        super().__init__()
+        self.setFixedSize(size, size)
+    
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        size = self.width()
+        center = size // 2
+        
+        gradient = QRadialGradient(center, center, size // 2)
+        gradient.setColorAt(0, QColor(ProColors.BLUE_PRIMARY))
+        gradient.setColorAt(1, QColor(ProColors.BLUE_DARK))
+        
+        painter.setBrush(QBrush(gradient))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(2, 2, size - 4, size - 4)
+        
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(255, 255, 255, 220))
+        
+        bar_width = size // 10
+        spacing = size // 10
+        heights = [0.4, 0.7, 0.5]
+        x_start = size // 4
+        
+        for i, h in enumerate(heights):
+            x = x_start + (i * (bar_width + spacing))
+            bar_height = int(size * h)
+            y = center - bar_height // 2
+            painter.drawRoundedRect(x, y, bar_width, bar_height, 2, 2)
+
+class CreditCalculator:
+    PRICING = {
+        'base': 1,
+        'local': 0,
+        'standard': 3,
+        'pro': 6
+    }
+    
+    @classmethod
+    def calculate(cls, audio_duration_sec, lip_sync_model):
+        base = cls.PRICING['base']
+        
+        if lip_sync_model == 'local':
+            return base
+        elif lip_sync_model == 'standard':
+            return base + cls.PRICING['standard']
+        elif lip_sync_model == 'pro':
+            return base + cls.PRICING['pro']
+        
+        return base
+    
+    @classmethod
+    def get_breakdown(cls, lip_sync_model):
+        base = cls.PRICING['base']
+        
+        if lip_sync_model == 'local':
+            return [
+                ('AI Video Generation', base, False),
+                ('Local Lip Sync', 0, True)
+            ]
+        elif lip_sync_model == 'standard':
+            return [
+                ('AI Video Generation', base, False),
+                ('Standard Lip Sync', cls.PRICING['standard'], True)
+            ]
+        elif lip_sync_model == 'pro':
+            return [
+                ('AI Video Generation', base, False),
+                ('Pro Lip Sync', cls.PRICING['pro'], True)
+            ]
+        
+        return [('AI Video Generation', base, True)]
+
+class AudioTrackCard(QWidget):
+    """PROFESSIONAL AUDIO TRACK CARD"""
+    selected = Signal(object)
+    deleted = Signal(object)
+    
+    def __init__(self, filename, duration, bpm, parent=None):
+        super().__init__(parent)
+        self.filename = filename
+        self.duration = duration
+        self.bpm = bpm
+        self.setup_ui()
+    
+    def setup_ui(self):
+        self.setMinimumHeight(64)  # Taller for better layout
+        self.setObjectName("audioCard")
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(12)
+        
+        # Radio button
+        self.radio = QRadioButton()
+        self.radio.toggled.connect(lambda: self.selected.emit(self))
+        layout.addWidget(self.radio)
+        
+        # Info section with proper word wrap
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(4)
+        
+        # Filename with ellipsis if too long
+        display_name = self.filename
+        if len(display_name) > 35:
+            display_name = display_name[:32] + "..."
+        
+        name_label = QLabel(display_name)
+        name_label.setStyleSheet(f"""
+            font-size: 12px; 
+            font-weight: 600; 
+            color: {ProColors.TEXT_PRIMARY};
+        """)
+        name_label.setWordWrap(False)
+        info_layout.addWidget(name_label)
+        
+        # Duration and BPM
+        meta_label = QLabel(f"{self.duration} • {self.bpm} BPM")
+        meta_label.setStyleSheet(f"""
+            font-size: 10px; 
+            color: {ProColors.TEXT_TERTIARY};
+        """)
+        info_layout.addWidget(meta_label)
+        
+        layout.addLayout(info_layout, 1)
+        
+        # Delete button
+        delete_btn = QPushButton("×")
+        delete_btn.setFixedSize(32, 32)
+        delete_btn.setObjectName("deleteBtn")
+        delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        delete_btn.clicked.connect(lambda: self.deleted.emit(self))
+        layout.addWidget(delete_btn)
+
+class VideoThumbnail(QWidget):
+    """PROFESSIONAL VIDEO THUMBNAIL WITH REAL IMAGE PLACEHOLDER"""
+    toggled = Signal(object, bool)
+    deleted = Signal(object)
+    
+    def __init__(self, filename, duration, resolution, parent=None):
+        super().__init__(parent)
+        self.filename = filename
+        self.duration = duration
+        self.resolution = resolution
+        self._hovered = False
+        self._checked = True
+        self.setup_ui()
+    
+    def setup_ui(self):
+        self.setFixedSize(132, 108)  # Slightly smaller for better grid
+        self.setObjectName("videoThumb")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # Thumbnail container
+        thumb_container = QWidget()
+        thumb_container.setFixedSize(132, 74)  # 16:9 ratio
+        thumb_container.setObjectName("thumbContainer")
+        
+        thumb_layout = QStackedLayout(thumb_container)
+        thumb_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Create gradient thumbnail placeholder
+        self.thumb_widget = QWidget()
+        self.thumb_widget.setObjectName("thumbPlaceholder")
+        
+        thumb_content = QVBoxLayout(self.thumb_widget)
+        thumb_content.setContentsMargins(0, 0, 0, 0)
+        thumb_content.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Video icon
+        icon_label = QLabel("▶")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet(f"""
+            font-size: 24px;
+            color: {ProColors.TEXT_SECONDARY};
+            background: transparent;
+        """)
+        thumb_content.addWidget(icon_label)
+        
+        # Duration badge
+        duration_label = QLabel(self.duration)
+        duration_label.setStyleSheet(f"""
+            font-size: 9px;
+            font-weight: 600;
+            color: {ProColors.TEXT_PRIMARY};
+            background: rgba(0, 0, 0, 180);
+            padding: 2px 6px;
+            border-radius: 3px;
+        """)
+        duration_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        duration_container = QWidget()
+        duration_container.setFixedHeight(20)
+        duration_layout = QHBoxLayout(duration_container)
+        duration_layout.setContentsMargins(6, 0, 6, 6)
+        duration_layout.addStretch()
+        duration_layout.addWidget(duration_label)
+        
+        thumb_layout.addWidget(self.thumb_widget)
+        
+        # Overlays
+        overlay_widget = QWidget(thumb_container)
+        overlay_widget.setGeometry(0, 0, 132, 74)
+        overlay_widget.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        overlay_widget.raise_()
+        
+        overlay_layout = QVBoxLayout(overlay_widget)
+        overlay_layout.setContentsMargins(6, 6, 6, 6)
+        
+        # Top row: Delete button
+        top_row = QHBoxLayout()
+        top_row.addStretch()
+        
+        self.delete_btn = QPushButton("×")
+        self.delete_btn.setFixedSize(22, 22)
+        self.delete_btn.setObjectName("thumbDeleteBtn")
+        self.delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.delete_btn.clicked.connect(lambda: self.deleted.emit(self))
+        self.delete_btn.hide()
+        top_row.addWidget(self.delete_btn)
+        
+        overlay_layout.addLayout(top_row)
+        overlay_layout.addStretch()
+        
+        # Bottom row: Checkbox
+        bottom_row = QHBoxLayout()
+        
+        self.checkbox = QCheckBox()
+        self.checkbox.setChecked(True)
+        self.checkbox.toggled.connect(lambda c: self.toggled.emit(self, c))
+        bottom_row.addWidget(self.checkbox)
+        bottom_row.addWidget(duration_container)
+        bottom_row.addStretch()
+        
+        overlay_layout.addLayout(bottom_row)
+        
+        layout.addWidget(thumb_container)
+        
+        # Filename
+        short_name = self.filename
+        if len(short_name) > 16:
+            short_name = short_name[:13] + "..."
+        
+        name_label = QLabel(short_name)
+        name_label.setStyleSheet(f"""
+            font-size: 10px;
+            color: {ProColors.TEXT_SECONDARY};
+            padding: 0 4px;
+        """)
+        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        name_label.setWordWrap(False)
+        layout.addWidget(name_label)
+    
+    def enterEvent(self, event):
+        self._hovered = True
+        self.delete_btn.show()
+        self.update()
+    
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.delete_btn.hide()
+        self.update()
+    
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        if self._hovered:
+            rect = self.rect().adjusted(0, 0, 0, -34)
+            painter.setPen(QPen(QColor(ProColors.BLUE_PRIMARY), 2))
+            painter.drawRoundedRect(rect, 6, 6)
+
+class PremiumCostWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.total_credits = 1
+        self.breakdown = [('AI Video Generation', 1, False), ('Local Lip Sync', 0, True)]
+        self.setup_ui()
+    
+    def setup_ui(self):
+        self.setObjectName("costWidget")
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+        
+        header_label = QLabel("COST ESTIMATE")
+        header_label.setStyleSheet(f"""
+            font-size: 9px;
+            font-weight: 700;
+            color: {ProColors.TEXT_TERTIARY};
+            letter-spacing: 1.2px;
+        """)
+        layout.addWidget(header_label)
+        
+        self.items_layout = QVBoxLayout()
+        self.items_layout.setSpacing(4)
+        layout.addLayout(self.items_layout)
+        
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.HLine)
+        divider.setStyleSheet(f"background: {ProColors.DIVIDER}; max-height: 1px; margin: 2px 0;")
+        layout.addWidget(divider)
+        
+        total_layout = QHBoxLayout()
+        
+        total_label = QLabel("Total")
+        total_label.setStyleSheet(f"""
+            font-size: 12px;
+            font-weight: 700;
+            color: {ProColors.TEXT_PRIMARY};
+        """)
+        total_layout.addWidget(total_label)
+        total_layout.addStretch()
+        
+        self.total_value = QLabel("1 credit")
+        self.total_value.setStyleSheet(f"""
+            font-size: 15px;
+            font-weight: 700;
+            color: {ProColors.GREEN_SUCCESS};
+        """)
+        total_layout.addWidget(self.total_value)
+        
+        layout.addLayout(total_layout)
+        
+        self.update_cost(1, self.breakdown)
+    
+    def update_cost(self, total_credits, breakdown):
+        self.total_credits = total_credits
+        self.breakdown = breakdown
+        
+        while self.items_layout.count():
+            child = self.items_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        for item_name, credits, is_last in breakdown:
+            item_row = QHBoxLayout()
+            item_row.setSpacing(8)
+            
+            name_label = QLabel(item_name)
+            name_label.setStyleSheet(f"""
+                font-size: 10px;
+                color: {ProColors.TEXT_SECONDARY};
+            """)
+            item_row.addWidget(name_label)
+            item_row.addStretch()
+            
+            if credits == 0:
+                credit_label = QLabel("FREE")
+                credit_label.setStyleSheet(f"""
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: {ProColors.GREEN_SUCCESS};
+                """)
+            else:
+                credit_label = QLabel(f"{credits} credit{'s' if credits > 1 else ''}")
+                credit_label.setStyleSheet(f"""
+                    font-size: 10px;
+                    font-weight: 600;
+                    color: {ProColors.TEXT_TERTIARY};
+                """)
+            item_row.addWidget(credit_label)
+            
+            self.items_layout.addLayout(item_row)
+        
+        plural = 's' if total_credits > 1 else ''
+        self.total_value.setText(f"{total_credits} credit{plural}")
+        
+        if total_credits == 1:
+            color = ProColors.GREEN_SUCCESS
+        elif total_credits <= 4:
+            color = ProColors.BLUE_PRIMARY
+        else:
+            color = ProColors.AMBER_WARNING
+        
+        self.total_value.setStyleSheet(f"""
+            font-size: 15px;
+            font-weight: 700;
+            color: {color};
+        """)
+
+class PresetCard(QWidget):
+    clicked = Signal()
+    
+    def __init__(self, title, subtitle):
+        super().__init__()
+        self.setFixedHeight(56)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._checked = False
+        self._hovered = False
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 8, 14, 8)
+        layout.setSpacing(2)
+        
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"""
+            font-size: 13px; font-weight: 600; color: {ProColors.TEXT_PRIMARY};
+            background: transparent; border: none;
+        """)
+        layout.addWidget(title_label)
+        
+        subtitle_label = QLabel(subtitle)
+        subtitle_label.setStyleSheet(f"""
+            font-size: 10px; color: {ProColors.TEXT_TERTIARY};
+            background: transparent; border: none;
+        """)
+        layout.addWidget(subtitle_label)
+    
+    def setChecked(self, checked):
+        self._checked = checked
+        self.update()
+    
+    def enterEvent(self, event):
+        self._hovered = True
+        self.update()
+    
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.update()
+    
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+    
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        rect = self.rect()
+        
+        if self._checked:
+            painter.setPen(QPen(QColor(ProColors.BLUE_PRIMARY), 2))
+            painter.setBrush(QColor(74, 158, 255, 12))
+        elif self._hovered:
+            painter.setPen(QPen(QColor(ProColors.BORDER), 1))
+            painter.setBrush(QColor(ProColors.BG_ELEVATED))
+        else:
+            painter.setPen(QPen(QColor(ProColors.BORDER), 1))
+            painter.setBrush(QColor(ProColors.BG_SURFACE))
+        
+        painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 6, 6)
+
+class ResolutionInfoWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(6)
+        
+        self.status_label = QLabel("No clips imported")
+        self.status_label.setStyleSheet(f"color: {ProColors.TEXT_DIM}; font-size: 11px;")
+        layout.addWidget(self.status_label)
+        
+        self.breakdown_label = QLabel("")
+        self.breakdown_label.setStyleSheet(f"color: {ProColors.TEXT_TERTIARY}; font-size: 10px;")
+        self.breakdown_label.setWordWrap(True)
+        layout.addWidget(self.breakdown_label)
+    
+    def update_clips(self, clips_data):
+        count = clips_data.get('count', 0)
+        status_text = f"Project: 1920x1080 (Auto)"
+        breakdown_text = f"✓ {count} clips imported"
+        
+        self.status_label.setText(status_text)
+        self.status_label.setStyleSheet(f"color: {ProColors.TEXT_PRIMARY}; font-size: 11px; font-weight: 600;")
+        self.breakdown_label.setText(breakdown_text)
+
+class FlowLayout(QLayout):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.item_list = []
+    
+    def addItem(self, item):
+        self.item_list.append(item)
+    
+    def count(self):
+        return len(self.item_list)
+    
+    def itemAt(self, index):
+        if 0 <= index < len(self.item_list):
+            return self.item_list[index]
+        return None
+    
+    def takeAt(self, index):
+        if 0 <= index < len(self.item_list):
+            return self.item_list.pop(index)
+        return None
+    
+    def sizeHint(self):
+        return self.minimumSize()
+    
+    def minimumSize(self):
+        size = QSize()
+        for item in self.item_list:
+            size = size.expandedTo(item.minimumSize())
+        return size
+    
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect)
+    
+    def _do_layout(self, rect):
+        x = rect.x()
+        y = rect.y()
+        line_height = 0
+        spacing = 8
+        
+        for item in self.item_list:
+            widget = item.widget()
+            if widget:
+                space_x = spacing
+                space_y = spacing
+                
+                next_x = x + widget.sizeHint().width() + space_x
+                if next_x - space_x > rect.right() and line_height > 0:
+                    x = rect.x()
+                    y = y + line_height + space_y
+                    next_x = x + widget.sizeHint().width() + space_x
+                    line_height = 0
+                
+                item.setGeometry(QRect(QPoint(x, y), widget.sizeHint()))
+                
+                x = next_x
+                line_height = max(line_height, widget.sizeHint().height())
+
+class BeatSyncUltimate(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("BeatSync PRO")
+        self.setMinimumSize(1680, 960)
+        self.resize(1920, 1080)
+        self.presets = []
+        self.has_audio = False
+        self.audio_duration = 225
+        
+        self.audio_tracks = []
+        self.video_clips = []
+        self.selected_audio = None
+        
+        self.setup_ui()
+        self.apply_theme()
+    
+    def setup_ui(self):
+        self.setMenuBar(None)
+        
+        central = QWidget()
+        self.setCentralWidget(central)
+        
+        main = QVBoxLayout(central)
+        main.setContentsMargins(0, 0, 0, 0)
+        main.setSpacing(0)
+        
+        main.addWidget(self.create_topaz_bar())
+        
+        content = QHBoxLayout()
+        content.setSpacing(0)
+        content.addWidget(self.create_left_panel())
+        content.addWidget(self.create_center_panel())
+        content.addWidget(self.create_right_panel())
+        main.addLayout(content, 1)
+    
+    def create_topaz_bar(self):
+        bar = QWidget()
+        bar.setFixedHeight(56)
+        bar.setObjectName("topazBar")
+        
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(8, 0, 20, 0)
+        layout.setSpacing(0)
+        
+        # FILE MENU
+        file_btn = QPushButton("File")
+        file_btn.setObjectName("menuBtn")
+        file_btn.setFixedHeight(56)
+        file_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        file_menu = QMenu(file_btn)
+        file_menu.addAction("New Project", lambda: print("New Project"), "Ctrl+N")
+        file_menu.addAction("Open Project...", lambda: print("Open Project"), "Ctrl+O")
+        file_menu.addAction("Save Project", lambda: print("Save Project"), "Ctrl+S")
+        file_menu.addAction("Save Project As...", lambda: print("Save As"), "Ctrl+Shift+S")
+        file_menu.addSeparator()
+        file_menu.addAction("Import Audio...", self.import_audio, "Ctrl+I")
+        file_menu.addAction("Import Videos...", self.import_videos, "Ctrl+Shift+I")
+        file_menu.addSeparator()
+        file_menu.addAction("Export Video...", lambda: print("Export"), "Ctrl+E")
+        file_menu.addSeparator()
+        file_menu.addAction("Exit", self.close, "Ctrl+Q")
+        file_btn.setMenu(file_menu)
+        layout.addWidget(file_btn)
+        
+        # EDIT MENU
+        edit_btn = QPushButton("Edit")
+        edit_btn.setObjectName("menuBtn")
+        edit_btn.setFixedHeight(56)
+        edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        edit_menu = QMenu(edit_btn)
+        edit_menu.addAction("Undo", lambda: print("Undo"), "Ctrl+Z")
+        edit_menu.addAction("Redo", lambda: print("Redo"), "Ctrl+Y")
+        edit_menu.addSeparator()
+        edit_menu.addAction("Cut", lambda: print("Cut"), "Ctrl+X")
+        edit_menu.addAction("Copy", lambda: print("Copy"), "Ctrl+C")
+        edit_menu.addAction("Paste", lambda: print("Paste"), "Ctrl+V")
+        edit_menu.addAction("Delete", lambda: print("Delete"), "Del")
+        edit_menu.addSeparator()
+        edit_menu.addAction("Select All", lambda: print("Select All"), "Ctrl+A")
+        edit_menu.addAction("Deselect All", lambda: print("Deselect"), "Ctrl+D")
+        edit_menu.addSeparator()
+        edit_menu.addAction("Preferences...", lambda: print("Preferences"), "Ctrl+,")
+        edit_btn.setMenu(edit_menu)
+        layout.addWidget(edit_btn)
+        
+        # VIEW MENU
+        view_btn = QPushButton("View")
+        view_btn.setObjectName("menuBtn")
+        view_btn.setFixedHeight(56)
+        view_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        view_menu = QMenu(view_btn)
+        view_menu.addAction("Zoom In", lambda: print("Zoom In"), "Ctrl++")
+        view_menu.addAction("Zoom Out", lambda: print("Zoom Out"), "Ctrl+-")
+        view_menu.addAction("Zoom to Fit", lambda: print("Zoom Fit"), "Ctrl+0")
+        view_menu.addSeparator()
+        view_menu.addAction("Show Timeline", lambda: print("Toggle Timeline"), "T")
+        view_menu.addAction("Show Waveform", lambda: print("Toggle Waveform"), "W")
+        view_menu.addAction("Show Beat Markers", lambda: print("Toggle Beats"), "B")
+        view_menu.addSeparator()
+        view_menu.addAction("Fullscreen", lambda: print("Fullscreen"), "F11")
+        view_btn.setMenu(view_menu)
+        layout.addWidget(view_btn)
+        
+        # PROCESS MENU
+        process_btn = QPushButton("Process")
+        process_btn.setObjectName("menuBtn")
+        process_btn.setFixedHeight(56)
+        process_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        process_menu = QMenu(process_btn)
+        process_menu.addAction("Analyze Audio", lambda: print("Analyze Audio"))
+        process_menu.addAction("Detect Beats", lambda: print("Detect Beats"))
+        process_menu.addAction("Analyze Videos", lambda: print("Analyze Videos"))
+        process_menu.addSeparator()
+        process_menu.addAction("Generate Video", lambda: print("Generate"), "Ctrl+G")
+        process_menu.addAction("Stop Generation", lambda: print("Stop"), "Esc")
+        process_menu.addSeparator()
+        process_menu.addAction("Render Preview", lambda: print("Render Preview"))
+        process_btn.setMenu(process_menu)
+        layout.addWidget(process_btn)
+        
+        # ACCOUNT MENU
+        account_btn = QPushButton("Account")
+        account_btn.setObjectName("menuBtn")
+        account_btn.setFixedHeight(56)
+        account_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        account_menu = QMenu(account_btn)
+        account_menu.addAction("My Profile", lambda: print("Profile"))
+        account_menu.addAction("Purchase Credits", lambda: print("Buy Credits"))
+        account_menu.addAction("Subscription", lambda: print("Subscription"))
+        account_menu.addSeparator()
+        account_menu.addAction("Settings", lambda: print("Settings"))
+        account_menu.addAction("Sign Out", lambda: print("Sign Out"))
+        account_btn.setMenu(account_menu)
+        layout.addWidget(account_btn)
+        
+        # HELP MENU
+        help_btn = QPushButton("Help")
+        help_btn.setObjectName("menuBtn")
+        help_btn.setFixedHeight(56)
+        help_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        help_menu = QMenu(help_btn)
+        help_menu.addAction("Documentation", lambda: print("Docs"), "F1")
+        help_menu.addAction("Keyboard Shortcuts", lambda: print("Shortcuts"))
+        help_menu.addAction("Video Tutorials", lambda: print("Tutorials"))
+        help_menu.addSeparator()
+        help_menu.addAction("Report Bug", lambda: print("Report Bug"))
+        help_menu.addAction("Feature Request", lambda: print("Feature Request"))
+        help_menu.addSeparator()
+        help_menu.addAction("About BeatSync PRO", lambda: print("About"))
+        help_btn.setMenu(help_menu)
+        layout.addWidget(help_btn)
+        
+        layout.addStretch(1)
+        
+        # LOGO
+        brand_widget = QWidget()
+        brand_layout = QHBoxLayout(brand_widget)
+        brand_layout.setContentsMargins(0, 0, 0, 0)
+        brand_layout.setSpacing(10)
+        
+        logo_icon = BeatSyncLogo(28)
+        brand_layout.addWidget(logo_icon)
+        
+        brand_name = QLabel("BeatSync PRO")
+        brand_name.setStyleSheet(f"""
+            font-size: 16px;
+            font-weight: 700;
+            color: {ProColors.TEXT_PRIMARY};
+            letter-spacing: 0.5px;
+        """)
+        brand_layout.addWidget(brand_name)
+        
+        layout.addWidget(brand_widget)
+        layout.addStretch(1)
+        
+        # CREDITS + ACCOUNT
+        cred_label = QLabel("47")
+        cred_label.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {ProColors.GREEN_SUCCESS};")
+        layout.addWidget(cred_label)
+        
+        account_user_btn = QPushButton("Demo User")
+        account_user_btn.setObjectName("accountBtn")
+        account_user_btn.setFixedHeight(32)
+        layout.addWidget(account_user_btn)
+        
+        return bar
+    
+    def create_left_panel(self):
+        """PROFESSIONAL LEFT PANEL - PERFECT LAYOUT"""
+        panel = QWidget()
+        panel.setFixedWidth(280)  # Slightly narrower for better fit
+        panel.setObjectName("leftPanel")
+        
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.setSpacing(0)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setObjectName("leftScroll")
+        
+        content = QWidget()
+        content.setObjectName("leftContent")
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(14, 18, 14, 20)
+        layout.setSpacing(16)
+        
+        # AUDIO SECTION
+        audio_header = QLabel("AUDIO TRACKS")
+        audio_header.setStyleSheet(f"""
+            font-size: 10px; font-weight: 700; color: {ProColors.TEXT_TERTIARY}; letter-spacing: 1.2px;
+        """)
+        layout.addWidget(audio_header)
+        
+        audio_btn = QPushButton("+ Import Audio")
+        audio_btn.setObjectName("importBtn")
+        audio_btn.setFixedHeight(42)
+        audio_btn.clicked.connect(self.import_audio)
+        layout.addWidget(audio_btn)
+        
+        self.audio_container = QWidget()
+        self.audio_layout = QVBoxLayout(self.audio_container)
+        self.audio_layout.setContentsMargins(0, 0, 0, 0)
+        self.audio_layout.setSpacing(8)
+        
+        self.audio_empty = QLabel("No audio tracks imported")
+        self.audio_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.audio_empty.setStyleSheet(f"color: {ProColors.TEXT_DIM}; font-size: 11px; padding: 20px 0;")
+        self.audio_layout.addWidget(self.audio_empty)
+        
+        layout.addWidget(self.audio_container)
+        
+        # DIVIDER
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet(f"background: {ProColors.DIVIDER}; max-height: 1px; margin: 6px 0;")
+        layout.addWidget(line)
+        
+        # VIDEO SECTION
+        video_header_layout = QHBoxLayout()
+        
+        video_header = QLabel("VIDEO CLIPS")
+        video_header.setStyleSheet(audio_header.styleSheet())
+        video_header_layout.addWidget(video_header)
+        
+        self.video_count_label = QLabel("0/300")
+        self.video_count_label.setStyleSheet(f"font-size: 10px; color: {ProColors.TEXT_DIM};")
+        video_header_layout.addStretch()
+        video_header_layout.addWidget(self.video_count_label)
+        
+        layout.addLayout(video_header_layout)
+        
+        video_btn = QPushButton("+ Import Videos")
+        video_btn.setObjectName("importBtn")
+        video_btn.setFixedHeight(42)
+        video_btn.clicked.connect(self.import_videos)
+        layout.addWidget(video_btn)
+        
+        # THUMBNAIL GRID
+        self.video_container = QWidget()
+        self.video_container.setMinimumHeight(100)
+        self.video_layout = FlowLayout(self.video_container)
+        
+        self.video_empty = QLabel("No video clips imported\nMax 15 seconds each")
+        self.video_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.video_empty.setStyleSheet(f"color: {ProColors.TEXT_DIM}; font-size: 11px; padding: 20px 0;")
+        self.video_empty.setParent(self.video_container)
+        self.video_empty.setGeometry(0, 0, 252, 80)
+        
+        layout.addWidget(self.video_container)
+        
+        layout.addStretch()
+        
+        scroll.setWidget(content)
+        panel_layout.addWidget(scroll)
+        
+        return panel
+    
+    def create_center_panel(self):
+        panel = QWidget()
+        panel.setObjectName("centerPanel")
+        
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+        
+        video = QVideoWidget()
+        video.setMinimumHeight(600)
+        video.setObjectName("videoPreview")
+        layout.addWidget(video, 7)
+        
+        controls = self.create_controls()
+        layout.addWidget(controls)
+        
+        timeline = QLabel("Timeline • Waveform • Beat Markers\n(Appears during generation)")
+        timeline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        timeline.setMinimumHeight(200)
+        timeline.setObjectName("timelinePreview")
+        layout.addWidget(timeline, 3)
+        
+        return panel
+    
+    def create_controls(self):
+        controls = QWidget()
+        controls.setFixedHeight(52)
+        controls.setObjectName("playerControls")
+        
+        layout = QHBoxLayout(controls)
+        layout.setContentsMargins(10, 8, 10, 8)
+        
+        play = QPushButton("▶")
+        play.setFixedSize(36, 36)
+        play.setObjectName("playBtn")
+        layout.addWidget(play)
+        
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setObjectName("timeSlider")
+        layout.addWidget(slider, 1)
+        
+        time_label = QLabel("0:00 / 0:00")
+        time_label.setStyleSheet(f"color: {ProColors.TEXT_SECONDARY}; font-family: 'Consolas', monospace; font-size: 11px;")
+        layout.addWidget(time_label)
+        
+        return controls
+    
+    def create_right_panel(self):
+        panel = QWidget()
+        panel.setFixedWidth(340)
+        panel.setObjectName("rightPanel")
+        
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.setSpacing(0)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setObjectName("rightScroll")
+        
+        content = QWidget()
+        content.setObjectName("rightContent")
+        
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        
+        header = QLabel("AI Director")
+        header.setStyleSheet(f"font-size: 16px; font-weight: 700; color: {ProColors.TEXT_PRIMARY};")
+        layout.addWidget(header)
+        
+        intensity_label = QLabel("EDITING INTENSITY")
+        intensity_label.setStyleSheet(f"""
+            font-size: 10px; font-weight: 700; color: {ProColors.TEXT_TERTIARY};
+            letter-spacing: 1.2px; margin-top: 4px;
+        """)
+        layout.addWidget(intensity_label)
+        
+        presets = [
+            ("Chill", "Smooth, contemplative pacing"),
+            ("Balanced", "Mix of pacing • Recommended"),
+            ("Dynamic", "Energetic, varied cuts"),
+            ("Flash Cuts", "Rapid fire editing"),
+            ("Hypercut", "Ultra dynamic cuts"),
+            ("EXTREME", "Maximum intensity")
+        ]
+        
+        for title, subtitle in presets:
+            card = PresetCard(title, subtitle)
+            if title == "Balanced":
+                card.setChecked(True)
+            card.clicked.connect(lambda c=card: self.select_preset(c))
+            self.presets.append(card)
+            layout.addWidget(card)
+        
+        settings_label = QLabel("PROJECT SETTINGS")
+        settings_label.setStyleSheet(intensity_label.styleSheet())
+        settings_label.setContentsMargins(0, 10, 0, 0)
+        layout.addWidget(settings_label)
+        
+        self.resolution_info = ResolutionInfoWidget()
+        self.resolution_info.setStyleSheet(f"""
+            background: {ProColors.BG_ELEVATED}; border: 1px solid {ProColors.BORDER}; border-radius: 6px;
+        """)
+        layout.addWidget(self.resolution_info)
+        
+        lip_label = QLabel("Lip Sync Quality")
+        lip_label.setStyleSheet(f"color: {ProColors.TEXT_TERTIARY}; font-size: 12px; margin-top: 6px;")
+        layout.addWidget(lip_label)
+        
+        self.lip_combo = QComboBox()
+        self.lip_combo.addItem("Local (Free)", "local")
+        self.lip_combo.addItem("Standard (+3 credits)", "standard")
+        self.lip_combo.addItem("Pro (+6 credits)", "pro")
+        self.lip_combo.setFixedHeight(34)
+        self.lip_combo.setObjectName("settingCombo")
+        self.lip_combo.currentIndexChanged.connect(self.update_cost)
+        layout.addWidget(self.lip_combo)
+        
+        gen_btn = QPushButton("Generate Video")
+        gen_btn.setFixedHeight(48)
+        gen_btn.setObjectName("generateBtn")
+        gen_btn.setContentsMargins(0, 10, 0, 0)
+        layout.addWidget(gen_btn)
+        
+        self.cost_widget = PremiumCostWidget()
+        layout.addWidget(self.cost_widget)
+        
+        layout.addStretch()
+        
+        scroll.setWidget(content)
+        panel_layout.addWidget(scroll)
+        
+        return panel
+    
+    def select_preset(self, selected):
+        for card in self.presets:
+            card.setChecked(card == selected)
+    
+    def update_cost(self):
+        model = self.lip_combo.currentData()
+        credits = CreditCalculator.calculate(self.audio_duration, model)
+        breakdown = CreditCalculator.get_breakdown(model)
+        
+        self.cost_widget.update_cost(credits, breakdown)
+    
+    def import_audio(self):
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Import Audio Tracks",
+            "",
+            "Audio Files (*.mp3 *.wav *.m4a *.flac);;All Files (*.*)"
+        )
+        
+        if files:
+            if self.audio_empty:
+                self.audio_empty.deleteLater()
+                self.audio_empty = None
+            
+            for file_path in files:
+                filename = os.path.basename(file_path)
+                duration = "3:45"
+                bpm = "80.7"
+                
+                card = AudioTrackCard(filename, duration, bpm)
+                card.selected.connect(self.on_audio_selected)
+                card.deleted.connect(self.on_audio_deleted)
+                
+                self.audio_tracks.append(card)
+                self.audio_layout.addWidget(card)
+                
+                if len(self.audio_tracks) == 1:
+                    card.radio.setChecked(True)
+    
+    def import_videos(self):
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Import Video Clips",
+            "",
+            "Video Files (*.mp4 *.mov *.avi *.mkv);;All Files (*.*)"
+        )
+        
+        if files:
+            if self.video_empty:
+                self.video_empty.deleteLater()
+                self.video_empty = None
+            
+            for file_path in files:
+                filename = os.path.basename(file_path)
+                duration = "8.2s"
+                resolution = "1920x1080"
+                
+                thumb = VideoThumbnail(filename, duration, resolution)
+                thumb.toggled.connect(self.on_video_toggled)
+                thumb.deleted.connect(self.on_video_deleted)
+                
+                self.video_clips.append(thumb)
+                self.video_layout.addWidget(thumb)
+            
+            self.video_count_label.setText(f"{len(self.video_clips)}/300")
+            self.resolution_info.update_clips({'count': len(self.video_clips)})
+    
+    def on_audio_selected(self, card):
+        self.selected_audio = card
+    
+    def on_audio_deleted(self, card):
+        self.audio_tracks.remove(card)
+        card.deleteLater()
+        
+        if not self.audio_tracks:
+            self.audio_empty = QLabel("No audio tracks imported")
+            self.audio_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.audio_empty.setStyleSheet(f"color: {ProColors.TEXT_DIM}; font-size: 11px; padding: 20px 0;")
+            self.audio_layout.addWidget(self.audio_empty)
+    
+    def on_video_toggled(self, thumb, checked):
+        pass
+    
+    def on_video_deleted(self, thumb):
+        self.video_clips.remove(thumb)
+        thumb.deleteLater()
+        
+        self.video_count_label.setText(f"{len(self.video_clips)}/300")
+        
+        if not self.video_clips:
+            self.video_empty = QLabel("No video clips imported\nMax 15 seconds each")
+            self.video_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.video_empty.setStyleSheet(f"color: {ProColors.TEXT_DIM}; font-size: 11px; padding: 20px 0;")
+            self.video_empty.setParent(self.video_container)
+            self.video_empty.setGeometry(0, 0, 252, 80)
+            self.video_empty.show()
+            
+            self.resolution_info.update_clips({'count': 0})
+    
+    def apply_theme(self):
+        self.setStyleSheet(f"""
+            QMainWindow {{ background: {ProColors.BG_DEEP}; }}
+            QWidget {{ color: {ProColors.TEXT_PRIMARY}; font-family: -apple-system, "Segoe UI", sans-serif; font-size: 13px; }}
+            
+            QScrollBar:vertical {{ background: {ProColors.BG_SURFACE}; width: 8px; border-radius: 4px; }}
+            QScrollBar::handle:vertical {{ background: {ProColors.BORDER}; border-radius: 4px; min-height: 30px; }}
+            QScrollBar::handle:vertical:hover {{ background: {ProColors.TEXT_DIM}; }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
+            
+            #topazBar {{ background: {ProColors.BG_SURFACE}; border-bottom: 1px solid {ProColors.BORDER}; }}
+            #menuBtn {{ background: transparent; color: {ProColors.TEXT_SECONDARY}; border: none; padding: 0 16px; font-size: 13px; font-weight: 500; }}
+            #menuBtn:hover {{ background: {ProColors.BG_ELEVATED}; color: {ProColors.TEXT_PRIMARY}; }}
+            #menuBtn::menu-indicator {{ image: none; }}
+            
+            QMenu {{ background: {ProColors.BG_ELEVATED}; border: 1px solid {ProColors.BORDER}; padding: 4px; }}
+            QMenu::item {{ padding: 8px 24px; border-radius: 4px; }}
+            QMenu::item:selected {{ background: {ProColors.BLUE_PRIMARY}; }}
+            
+            #accountBtn {{ background: {ProColors.BG_ELEVATED}; border: 1px solid {ProColors.BORDER}; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 500; margin-left: 8px; }}
+            #accountBtn:hover {{ background: {ProColors.BG_INPUT}; border-color: {ProColors.BLUE_PRIMARY}; }}
+            
+            #leftPanel, #rightPanel {{ background: {ProColors.BG_SURFACE}; }}
+            #leftPanel {{ border-right: 1px solid {ProColors.BORDER}; }}
+            #rightPanel {{ border-left: 1px solid {ProColors.BORDER}; }}
+            #centerPanel {{ background: {ProColors.BG_DEEP}; }}
+            #leftScroll, #rightScroll {{ border: none; background: {ProColors.BG_SURFACE}; }}
+            #leftContent, #rightContent {{ background: {ProColors.BG_SURFACE}; }}
+            
+            #videoPreview {{ background: #000000; border: 1px solid {ProColors.BORDER}; border-radius: 6px; }}
+            #playerControls {{ background: {ProColors.BG_SURFACE}; border: 1px solid {ProColors.BORDER}; border-radius: 6px; }}
+            #playBtn {{ background: {ProColors.BLUE_PRIMARY}; color: white; border: none; border-radius: 18px; font-size: 12px; font-weight: bold; }}
+            #playBtn:hover {{ background: {ProColors.BLUE_HOVER}; }}
+            #timeSlider::groove:horizontal {{ height: 4px; background: {ProColors.BG_INPUT}; border-radius: 2px; }}
+            #timeSlider::handle:horizontal {{ width: 12px; height: 12px; background: {ProColors.BLUE_PRIMARY}; border-radius: 6px; margin: -4px 0; }}
+            #timeSlider::sub-page:horizontal {{ background: {ProColors.BLUE_PRIMARY}; border-radius: 2px; }}
+            #timelinePreview {{ background: {ProColors.BG_SURFACE}; border: 1px solid {ProColors.BORDER}; border-radius: 6px; color: {ProColors.TEXT_DIM}; font-size: 11px; }}
+            
+            #importBtn {{ 
+                background: {ProColors.BG_ELEVATED}; 
+                border: 1px solid {ProColors.BORDER}; 
+                border-radius: 6px; 
+                font-weight: 600; 
+                font-size: 13px; 
+                padding: 11px 14px;
+            }}
+            #importBtn:hover {{ background: {ProColors.BG_INPUT}; border-color: {ProColors.BLUE_PRIMARY}; }}
+            
+            #deleteBtn {{ 
+                background: {ProColors.BG_ELEVATED}; 
+                border: 1px solid {ProColors.BORDER}; 
+                border-radius: 4px; 
+                font-size: 18px;
+                font-weight: bold;
+                color: {ProColors.TEXT_SECONDARY};
+            }}
+            #deleteBtn:hover {{ 
+                background: {ProColors.RED_DELETE}; 
+                border-color: {ProColors.RED_DELETE};
+                color: white;
+            }}
+            
+            #thumbDeleteBtn {{
+                background: rgba(255, 71, 87, 200);
+                border: none;
+                border-radius: 11px;
+                font-size: 16px;
+                font-weight: bold;
+                color: white;
+            }}
+            #thumbDeleteBtn:hover {{ background: {ProColors.RED_DELETE}; }}
+            
+            #generateBtn {{ 
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {ProColors.BLUE_PRIMARY}, stop:1 {ProColors.BLUE_DARK}); 
+                color: white; 
+                border: none; 
+                border-radius: 6px; 
+                font-size: 14px; 
+                font-weight: 700; 
+                letter-spacing: 0.3px; 
+            }}
+            #generateBtn:hover {{ background: {ProColors.BLUE_HOVER}; }}
+            
+            #audioCard {{ 
+                background: {ProColors.BG_ELEVATED}; 
+                border: 1px solid {ProColors.BORDER}; 
+                border-radius: 6px; 
+            }}
+            #audioCard:hover {{ border-color: {ProColors.BLUE_PRIMARY}; }}
+            
+            #videoThumb {{ background: transparent; }}
+            #thumbContainer {{ 
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
+                    stop:0 {ProColors.BG_ELEVATED}, 
+                    stop:1 {ProColors.BG_INPUT}); 
+                border: 1px solid {ProColors.BORDER}; 
+                border-radius: 6px; 
+            }}
+            
+            #thumbPlaceholder {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
+                    stop:0 {ProColors.BG_ELEVATED}, 
+                    stop:1 {ProColors.BG_INPUT});
+            }}
+            
+            #settingCombo {{ 
+                background: {ProColors.BG_INPUT}; 
+                border: 1px solid {ProColors.BORDER}; 
+                border-radius: 5px; 
+                padding: 7px 10px; 
+                font-size: 12px; 
+                font-weight: 500; 
+                color: {ProColors.TEXT_PRIMARY}; 
+            }}
+            #settingCombo:hover {{ border-color: {ProColors.BLUE_PRIMARY}; }}
+            #settingCombo::drop-down {{ border: none; padding-right: 8px; }}
+            #settingCombo QAbstractItemView {{ 
+                background: {ProColors.BG_INPUT}; 
+                border: 1px solid {ProColors.BORDER}; 
+                selection-background-color: {ProColors.BLUE_PRIMARY}; 
+                color: {ProColors.TEXT_PRIMARY}; 
+            }}
+            
+            #costWidget {{ 
+                background: {ProColors.BG_ELEVATED}; 
+                border: 1px solid {ProColors.BORDER}; 
+                border-radius: 8px; 
+            }}
+            
+            QCheckBox, QRadioButton {{ spacing: 8px; }}
+            QCheckBox::indicator, QRadioButton::indicator {{ 
+                width: 18px; 
+                height: 18px; 
+                border: 2px solid {ProColors.BORDER}; 
+                border-radius: 4px; 
+                background: {ProColors.BG_INPUT}; 
+            }}
+            QRadioButton::indicator {{ border-radius: 9px; }}
+            QCheckBox::indicator:checked, QRadioButton::indicator:checked {{ 
+                background: {ProColors.BLUE_PRIMARY}; 
+                border-color: {ProColors.BLUE_PRIMARY}; 
+            }}
+        """)
+
+if __name__ == "__main__":
+    import sys
+    app = QApplication(sys.argv)
+    window = BeatSyncUltimate()
+    window.show()
+    sys.exit(app.exec())

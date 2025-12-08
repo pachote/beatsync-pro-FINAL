@@ -1,0 +1,191 @@
+"""
+BeatSync PRO™ - Face Detection Module
+Uses DeepFace for face detection and gender classification
+"""
+
+import cv2
+import numpy as np
+from pathlib import Path
+import logging
+from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+# Suppress TensorFlow warnings
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+class FaceDetector:
+    """
+    Professional face detection and gender classification
+    Uses DeepFace with MTCNN backend for accurate results
+    """
+    
+    def __init__(self):
+        """Initialize face detector with DeepFace"""
+        self.detector_backend = 'mtcnn'  # Fast and accurate
+        logger.info("✅ Face Detector initialized (DeepFace MTCNN)")
+        
+    def analyze_video_clip(self, video_path: str, sample_frames: int = 5) -> Dict:
+        """
+        Analyze video clip for faces and gender
+        
+        Args:
+            video_path: Path to video file
+            sample_frames: Number of frames to analyze (default 5)
+            
+        Returns:
+            {
+                'has_face': bool,
+                'face_count': int,
+                'gender': 'Man'/'Woman'/'Unknown',
+                'confidence': float,
+                'face_regions': list
+            }
+        """
+        try:
+            from deepface import DeepFace
+            
+            video_path = Path(video_path)
+            if not video_path.exists():
+                logger.error(f"Video not found: {video_path}")
+                return self._empty_result()
+            
+            # Open video
+            cap = cv2.VideoCapture(str(video_path))
+            if not cap.isOpened():
+                logger.error(f"Cannot open video: {video_path}")
+                return self._empty_result()
+            
+            # Get video info
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            
+            # Sample frames evenly
+            frame_indices = np.linspace(0, total_frames - 1, min(sample_frames, total_frames), dtype=int)
+            
+            face_results = []
+            gender_votes = {'Man': 0, 'Woman': 0}
+            
+            for frame_idx in frame_indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                ret, frame = cap.read()
+                
+                if not ret:
+                    continue
+                
+                # Analyze frame with DeepFace
+                try:
+                    analysis = DeepFace.analyze(
+                        frame,
+                        actions=['gender'],
+                        detector_backend=self.detector_backend,
+                        enforce_detection=False,
+                        silent=True
+                    )
+                    
+                    # Handle both single face and multiple faces
+                    if isinstance(analysis, list):
+                        for face in analysis:
+                            self._process_face_result(face, gender_votes, face_results)
+                    else:
+                        self._process_face_result(analysis, gender_votes, face_results)
+                        
+                except Exception as e:
+                    # No face detected in this frame - that's okay
+                    continue
+            
+            cap.release()
+            
+            # Compile results
+            has_face = len(face_results) > 0
+            face_count = len(face_results)
+            
+            # Determine dominant gender
+            if gender_votes['Man'] > gender_votes['Woman']:
+                gender = 'Man'
+                confidence = gender_votes['Man'] / sum(gender_votes.values())
+            elif gender_votes['Woman'] > 0:
+                gender = 'Woman'
+                confidence = gender_votes['Woman'] / sum(gender_votes.values())
+            else:
+                gender = 'Unknown'
+                confidence = 0.0
+            
+            result = {
+                'has_face': has_face,
+                'face_count': face_count,
+                'gender': gender,
+                'confidence': confidence,
+                'face_regions': face_results
+            }
+            
+            logger.info(f"✓ Analyzed {video_path.name}: {face_count} faces, Gender: {gender} ({confidence:.0%})")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error analyzing {video_path}: {e}")
+            return self._empty_result()
+    
+    def _process_face_result(self, face_data: Dict, gender_votes: Dict, face_results: List):
+        """Process a single face detection result"""
+        try:
+            # Extract gender
+            gender_data = face_data.get('gender', {})
+            if isinstance(gender_data, dict):
+                man_conf = gender_data.get('Man', 0)
+                woman_conf = gender_data.get('Woman', 0)
+                
+                if man_conf > woman_conf:
+                    gender_votes['Man'] += 1
+                    detected_gender = 'Man'
+                else:
+                    gender_votes['Woman'] += 1
+                    detected_gender = 'Woman'
+            else:
+                detected_gender = 'Unknown'
+            
+            # Extract region if available
+            region = face_data.get('region', {})
+            
+            face_results.append({
+                'gender': detected_gender,
+                'region': region
+            })
+            
+        except Exception as e:
+            logger.warning(f"Error processing face: {e}")
+    
+    def _empty_result(self) -> Dict:
+        """Return empty result when no faces detected"""
+        return {
+            'has_face': False,
+            'face_count': 0,
+            'gender': 'Unknown',
+            'confidence': 0.0,
+            'face_regions': []
+        }
+    
+    def batch_analyze_clips(self, video_paths: List[str]) -> Dict[str, Dict]:
+        """
+        Analyze multiple video clips
+        
+        Args:
+            video_paths: List of video file paths
+            
+        Returns:
+            Dict mapping video path to analysis results
+        """
+        results = {}
+        
+        logger.info(f"[FACE DETECTION] Analyzing {len(video_paths)} clips...")
+        
+        for i, video_path in enumerate(video_paths, 1):
+            logger.info(f"[FACE DETECTION] Processing {i}/{len(video_paths)}: {Path(video_path).name}")
+            results[video_path] = self.analyze_video_clip(video_path)
+        
+        # Summary
+        total_with_faces = sum(1 for r in results.values() if r['has_face'])
+        logger.info(f"[FACE DETECTION] Complete: {total_with_faces}/{len(video_paths)} clips have faces")
+        
+        return results

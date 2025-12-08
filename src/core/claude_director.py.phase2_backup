@@ -1,0 +1,268 @@
+﻿"""
+Enhanced Claude Director - AI Music Video Director with Effects
+Now outputs complete effect plans with color grading, visual effects, and beat synchronization
+"""
+
+import anthropic
+import json
+import os
+from pathlib import Path
+
+class ClaudeAIDirector:
+    def __init__(self, api_key=None):
+        if api_key is None:
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+        self.anthropic_client = anthropic.Anthropic(api_key=api_key)
+    
+    def generate_music_video_plan(self, video_analyses, music_analysis, 
+                                  style="auto", energy_level=7, lip_sync_enabled=False):
+        """
+        ENHANCED VERSION: Generates detailed effect plans with FFmpeg parameters
+        
+        Args:
+            video_analyses: Dict of video paths to analysis data
+            music_analysis: Dict with BPM, structure, beats, duration
+            style: Aesthetic style (auto/cinematic/cyberpunk/vintage/dreamy/energetic)
+            energy_level: 1-10 intensity setting
+            lip_sync_enabled: Whether to enable lip sync processing
+            
+        Returns:
+            Complete edit plan with effects, transitions, color grading, and timing
+        """
+        
+        # Calculate beat timing for this track
+        bpm = music_analysis.get('bpm', 120)
+        beat_duration = 60.0 / bpm  # Seconds per beat
+        total_duration = music_analysis.get('duration', 180)
+        
+        # Generate beat markers for the entire track
+        beat_times = [i * beat_duration for i in range(int(total_duration / beat_duration) + 1)]
+        
+        # Summarize video analyses for Claude
+        video_summary = []
+        for path, data in video_analyses.items():
+            filename = data.get('filename', path.split('/')[-1])
+            video_summary.append({
+                'filename': filename,
+                'subject': data.get('subject', 'unknown'),
+                'style': data.get('style', 'unknown'),
+                'energy': data.get('energy', 5),
+                'has_face': data.get('lip_sync_capable', False)
+            })
+        
+        # Structure summary
+        structure_info = music_analysis.get('structure', [])
+        structure_text = "\n".join([f"  - {s['type']}: {s['start']:.1f}s to {s['end']:.1f}s" 
+                                   for s in structure_info])
+        
+        # Enhanced prompt requesting detailed effects
+        prompt = f"""You are an AI Music Video Director. Create a COMPLETE music video edit plan with EFFECTS.
+
+MUSIC ANALYSIS:
+- BPM: {bpm} ({beat_duration:.3f} seconds per beat)
+- Duration: {total_duration:.1f} seconds
+- Structure:
+{structure_text}
+
+AVAILABLE VIDEO CLIPS: {len(video_analyses)} clips
+{json.dumps(video_summary, indent=2)}
+
+USER PREFERENCES:
+- Style: {style}
+- Energy Level: {energy_level}/10
+- Lip Sync: {"Enabled" if lip_sync_enabled else "Disabled"}
+
+AVAILABLE EFFECTS (from effects_library.py):
+
+COLOR GRADES:
+- cinematic_teal_orange: Hollywood blockbuster look
+- cyberpunk_neon: High contrast neon for electronic music
+- vintage_film: Warm nostalgic film look
+- dreamy_ethereal: Soft romantic glow
+- dark_moody: Desaturated dark tones for rock/metal
+- vibrant_pop: Bright saturated colors for pop/dance
+
+VISUAL EFFECTS:
+- film_grain: Organic film texture (intensity 15-30)
+- chromatic_aberration: RGB channel separation (cyberpunk)
+- vignette: Darkened corners for focus
+- soft_glow: Dreamy highlight bloom
+- rgb_glow: Neon glow for electronic music
+- subtle_blur: Soft focus effect
+- sharp_details: Enhanced clarity
+
+TRANSITIONS:
+- fade: Smooth opacity (0.5s default)
+- dissolve: Cross-dissolve blend (0.5s)
+- circleopen: Circular reveal (0.8s)
+- pixelize: Pixelated transition (0.3s)
+- wipeleft: Left to right wipe (0.4s)
+- cut: Direct cut (no transition)
+
+BEAT EFFECTS (for drops/choruses):
+- flash: Quick brightness flash on beat (0.05s)
+- pulse_scale: Scale pulse on beat (0.1s)
+- color_shift: Quick color shift (0.1s)
+
+CRITICAL RULES FOR PROFESSIONAL RESULTS:
+1. Choose ONE aesthetic style for the entire video and maintain it
+2. Limit to 2-3 concurrent effects per clip maximum
+3. Effect intensities between 0.3-0.8 (avoid extremes)
+4. Transitions should align with beat timing ({beat_duration:.3f}s multiples)
+5. Add beat effects ONLY on major beats in choruses/drops
+6. Color palette limited to 3-5 colors that work together
+7. Check compatibility: film_grain works with vignette, NOT with glitch
+8. For electronic music: use faster cuts and cyberpunk/neon aesthetics
+9. For ballads: use slower dissolves and dreamy/cinematic looks
+10. Trim each clip to fit the music timing precisely
+
+OUTPUT REQUIRED JSON FORMAT:
+{{
+    "aesthetic_style": "cyberpunk",
+    "reasoning": "High energy electronic track at {bpm} BPM needs fast-paced cyberpunk aesthetic",
+    "color_palette": ["#FF006E", "#00F5FF", "#8338EC"],
+    "clips": [
+        {{
+            "video_path": "exact_filename_here.mp4",
+            "start_time": 0,
+            "duration": 5.5,
+            "trim_start": 0.5,
+            "trim_end": 5.0,
+            "effects": {{
+                "color_grade": "cyberpunk_neon",
+                "intensity": 0.7,
+                "visual_fx": ["chromatic_aberration", "rgb_glow"],
+                "transition_in": {{"type": "fade", "duration": 0.5}},
+                "transition_out": {{"type": "circleopen", "duration": 0.3}},
+                "beat_flashes": [5.2, 5.76]
+            }},
+            "notes": "High energy clip for intro section"
+        }}
+    ],
+    "total_clips": 15,
+    "total_duration": {total_duration},
+    "lip_sync_moments": []
+}}
+
+MAKE DECISIONS LIKE A PROFESSIONAL DIRECTOR:
+- Choose aesthetic based on music genre and mood
+- Plan which clips go in intro/verse/chorus/drop/outro
+- Ensure visual variety but maintain coherence
+- Add beat effects at impactful moments (drops, chorus starts)
+- Use transitions that match the energy (fast = pixelize, slow = dissolve)
+
+Generate the complete edit plan now:"""
+
+        # Call Claude API
+        try:
+            message = self.anthropic_client.messages.create(
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=16000,
+                temperature=0.8,  # Slightly creative but not random
+                messages=[{
+                    "role": "user",
+                    "content": prompt
+                }]
+            )
+            
+            # Extract JSON from response
+            response_text = message.content[0].text
+            
+            # Find JSON in response (Claude might wrap it in markdown)
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            
+            if json_start == -1 or json_end == 0:
+                raise ValueError("No JSON found in Claude's response")
+            
+            json_text = response_text[json_start:json_end]
+            edit_plan = json.loads(json_text)
+            
+            # CRITICAL: PATH MAPPING FIX (DO NOT MODIFY!)
+            # Lines 47-59 from original - maps filenames to full paths
+            filename_to_path = {}
+            for full_path, data in video_analyses.items():
+                filename = data.get('filename', full_path.split('/')[-1])
+                filename_to_path[filename] = full_path
+            
+            # Apply path mapping to all clips
+            clips = edit_plan.get('clips', [])
+            for clip in clips:
+                filename = clip.get('video_path', '')
+                if filename in filename_to_path:
+                    clip['video_path'] = filename_to_path[filename]
+                else:
+                    # Try partial matching if exact doesn't work
+                    for fname, fpath in filename_to_path.items():
+                        if filename in fname or fname in filename:
+                            clip['video_path'] = fpath
+                            break
+            
+            # Add metadata for rendering pipeline
+            edit_plan['bpm'] = bpm
+            edit_plan['beat_duration'] = beat_duration
+            edit_plan['beat_times'] = beat_times[:50]  # First 50 beats for reference
+            
+            return edit_plan
+            
+        except Exception as e:
+            print(f"Error generating edit plan: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Return minimal fallback plan
+            return {
+                "aesthetic_style": "cinematic",
+                "error": str(e),
+                "clips": [],
+                "total_clips": 0,
+                "total_duration": total_duration
+            }
+    
+
+    def create_edit_plan(self, video_analyses, music_analysis, user_config):
+        """Legacy method name - calls generate_music_video_plan"""
+        return self.generate_music_video_plan(
+            video_analyses, 
+            music_analysis,
+            style=user_config.get('style', 'auto'),
+            energy_level=user_config.get('energy_level', 7),
+            lip_sync_enabled=user_config.get('lip_sync_enabled', False)
+        )
+
+    def preview_plan(self, edit_plan):
+        """
+        Generate human-readable preview of the edit plan
+        """
+        preview = []
+        preview.append(f"🎬 AI DIRECTOR VISION")
+        preview.append(f"═══════════════════════════════════════")
+        preview.append(f"Aesthetic: {edit_plan.get('aesthetic_style', 'N/A')}")
+        preview.append(f"Reasoning: {edit_plan.get('reasoning', 'N/A')}")
+        preview.append(f"")
+        preview.append(f"📊 VIDEO STRUCTURE")
+        preview.append(f"Total Clips: {edit_plan.get('total_clips', 0)}")
+        preview.append(f"Duration: {edit_plan.get('total_duration', 0):.1f}s")
+        preview.append(f"BPM: {edit_plan.get('bpm', 'N/A')}")
+        preview.append(f"")
+        
+        clips = edit_plan.get('clips', [])
+        if clips:
+            preview.append(f"🎞️ CLIP SEQUENCE")
+            for i, clip in enumerate(clips[:10], 1):  # Show first 10
+                effects = clip.get('effects', {})
+                grade = effects.get('color_grade', 'none')
+                fx_list = effects.get('visual_fx', [])
+                transition = effects.get('transition_out', {}).get('type', 'cut')
+                
+                preview.append(f"  {i}. {Path(clip.get('video_path', 'unknown')).name}")
+                preview.append(f"     Time: {clip.get('start_time', 0):.1f}s | Duration: {clip.get('duration', 0):.1f}s")
+                preview.append(f"     Grade: {grade} | Effects: {', '.join(fx_list) if fx_list else 'none'}")
+                preview.append(f"     Transition: {transition}")
+            
+            if len(clips) > 10:
+                preview.append(f"  ... and {len(clips) - 10} more clips")
+        
+        return "\n".join(preview)
+
+

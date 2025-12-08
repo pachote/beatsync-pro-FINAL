@@ -1,0 +1,496 @@
+#!/usr/bin/env python3
+"""
+BeatSync Pro - Enhanced Waveform Visualization Widget
+Professional-grade audio visualization with modern aesthetics
+"""
+
+import numpy as np
+import math
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PySide6.QtCore import Qt, QTimer, Signal, QRect, QRectF, QPointF, QPropertyAnimation, QEasingCurve, Property
+from PySide6.QtGui import (QPainter, QPen, QBrush, QColor, QLinearGradient, QRadialGradient, 
+                          QFont, QPainterPath, QFontMetrics, QConicalGradient)
+
+class WaveformWidget(QWidget):
+    """Professional waveform display with modern aesthetics"""
+    position_changed = Signal(float)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.audio_data = None
+        self.sample_rate = 44100
+        self.duration = 0
+        self.beats = []
+        self.downbeats = []
+        self.sections = []
+        self.current_position = 0
+        self.hover_position = -1
+        self.zoom_level = 1.0
+        
+        # Enhanced visual settings
+        self.bg_color_1 = QColor(10, 10, 15)  # Very dark blue-black
+        self.bg_color_2 = QColor(20, 20, 30)  # Slightly lighter
+        
+        # Modern color palette
+        self.waveform_color_top = QColor(0, 200, 255)     # Cyan
+        self.waveform_color_mid = QColor(0, 150, 255)     # Blue
+        self.waveform_color_bottom = QColor(147, 0, 211)  # Purple
+        
+        self.beat_color = QColor(255, 255, 255, 120)
+        self.downbeat_color = QColor(255, 200, 0)  # Gold
+        
+        # Section colors with better contrast
+        self.section_colors = {
+            'intro': QColor(155, 39, 176),   # Purple
+            'verse': QColor(3, 169, 244),    # Light Blue
+            'chorus': QColor(255, 61, 0),    # Deep Orange
+            'bridge': QColor(0, 230, 118),   # Green
+            'outro': QColor(255, 193, 7),    # Amber
+            'drop': QColor(255, 23, 68),     # Red
+            'build': QColor(233, 30, 99)     # Pink
+        }
+        
+        # Animation properties
+        self._glow = 0
+        self._beat_flash = 0
+        self.glow_timer = QTimer()
+        self.glow_timer.timeout.connect(self.update_glow)
+        
+        # Performance: cache painted elements
+        self.cache_dirty = True
+        self.waveform_path = None
+        
+        # Set minimum size
+        self.setMinimumHeight(200)
+        self.setMouseTracking(True)
+
+    def resizeEvent(self, event):
+        """Force height to 200px - override any layout attempts to resize"""
+        if event.size().height() != 200:
+            self.resize(event.size().width(), 200)
+        super().resizeEvent(event)
+        
+        # No border - we'll draw our own
+        self.setStyleSheet("QWidget { border: none; }")
+    
+    def set_audio_data(self, audio_data, sample_rate):
+        """Set audio data with improved visualization processing"""
+        self.audio_data = audio_data
+        self.sample_rate = sample_rate
+        self.duration = len(audio_data) / sample_rate if audio_data is not None else 0
+        self.cache_dirty = True
+        
+        if self.audio_data is not None and len(self.audio_data) > 0:
+            # Enhanced downsampling for smoother visualization
+            target_samples = min(4000, self.width() * 2)  # More samples for smoothness
+            chunk_size = max(1, len(self.audio_data) // target_samples)
+            
+            # Use RMS for better visual representation
+            self.visual_data = []
+            for i in range(0, len(self.audio_data) - chunk_size, chunk_size):
+                chunk = self.audio_data[i:i+chunk_size]
+                # RMS gives better visual weight than max
+                rms = np.sqrt(np.mean(chunk**2))
+                self.visual_data.append(rms)
+            
+            self.visual_data = np.array(self.visual_data)
+            
+            # Apply logarithmic scaling for better visual dynamics
+            self.visual_data = np.log10(self.visual_data + 1e-6)
+            self.visual_data -= np.min(self.visual_data)
+            
+            # Normalize with headroom
+            max_val = np.max(self.visual_data)
+            if max_val > 0:
+                self.visual_data = self.visual_data / max_val * 0.9  # 90% to avoid clipping
+            
+            # Smooth the waveform
+            from scipy.ndimage import gaussian_filter1d
+            try:
+                self.visual_data = gaussian_filter1d(self.visual_data, sigma=1)
+            except:
+                pass  # If scipy not available, skip smoothing
+        
+        self.update()
+    
+    def set_beat_data(self, analysis):
+        """Set beat markers with animation setup"""
+        if analysis:
+            self.beats = [beat.time for beat in analysis.beats]
+            self.downbeats = [beat.time for beat in analysis.beats if beat.is_downbeat]
+            self.sections = analysis.sections
+            self.duration = analysis.duration
+            
+            # Start beat pulse animation
+            if analysis.tempo > 0:
+                interval = int(60000 / analysis.tempo / 2)  # Pulse twice per beat
+                self.glow_timer.start(interval)
+        
+        self.cache_dirty = True
+        self.update()
+    
+    def update_glow(self):
+        """Smooth glow animation"""
+        self._beat_flash = 100
+        self.update()
+        
+        # Smooth fade out
+        for i in range(10):
+            QTimer.singleShot(i * 20, lambda v=100-i*10: setattr(self, '_beat_flash', v))
+        QTimer.singleShot(200, self.update)
+    
+    def paintEvent(self, event):
+        """Enhanced painting with modern aesthetics"""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        
+        width = self.width()
+        height = self.height()
+        
+        # Draw gradient background
+        bg_gradient = QLinearGradient(0, 0, 0, height)
+        bg_gradient.setColorAt(0, self.bg_color_1)
+        bg_gradient.setColorAt(0.5, self.bg_color_2)
+        bg_gradient.setColorAt(1, self.bg_color_1)
+        painter.fillRect(0, 0, width, height, bg_gradient)
+        
+        # Add subtle grid lines
+        painter.setPen(QPen(QColor(255, 255, 255, 10), 1))
+        grid_spacing = 50
+        for x in range(0, width, grid_spacing):
+            painter.drawLine(x, 0, x, height)
+        for y in range(0, height, grid_spacing):
+            painter.drawLine(0, y, width, y)
+        
+        if self.duration <= 0:
+            # Stylish no-data message
+            painter.setPen(QPen(QColor(100, 100, 120), 1))
+            font = QFont("Arial", 11, QFont.Light)
+            painter.setFont(font)
+            painter.drawText(self.rect(), Qt.AlignCenter, "Drop audio file to visualize")
+            return
+        
+        # Draw sections with gradient overlays
+        for section in self.sections:
+            start_x = int(section['start'] * width / self.duration)
+            end_x = int(section['end'] * width / self.duration)
+            section_type = section.get('type', 'verse').lower()
+            base_color = self.section_colors.get(section_type, QColor(100, 100, 100))
+            
+            # Gradient with transparency
+            section_gradient = QLinearGradient(start_x, 0, end_x, height)
+            color1 = QColor(base_color)
+            color1.setAlpha(20)
+            color2 = QColor(base_color)
+            color2.setAlpha(40)
+            color3 = QColor(base_color)
+            color3.setAlpha(10)
+            
+            section_gradient.setColorAt(0, color1)
+            section_gradient.setColorAt(0.5, color2)
+            section_gradient.setColorAt(1, color3)
+            
+            painter.fillRect(start_x, 0, end_x - start_x, height, section_gradient)
+            
+            # Section label with better typography
+            if end_x - start_x > 60:  # Only show label if section is wide enough
+                painter.setPen(QPen(QColor(255, 255, 255, 180), 1))
+                font = QFont("Arial", 9, QFont.Bold)
+                font.setLetterSpacing(QFont.AbsoluteSpacing, 2)
+                painter.setFont(font)
+                
+                label_rect = QRect(start_x + 10, 10, end_x - start_x - 20, 25)
+                painter.drawText(label_rect, Qt.AlignLeft | Qt.AlignTop, section_type.upper())
+        
+        # Draw enhanced waveform
+        if hasattr(self, 'visual_data') and self.visual_data is not None:
+            mid_y = height // 2
+            
+            # Create waveform path for smooth curves
+            path_top = QPainterPath()
+            path_bottom = QPainterPath()
+            
+            sample_width = width / len(self.visual_data)
+            
+            # Start paths
+            path_top.moveTo(0, mid_y)
+            path_bottom.moveTo(0, mid_y)
+            
+            # Build smooth waveform paths
+            for i in range(len(self.visual_data)):
+                x = i * sample_width
+                
+                # Apply slight randomness for organic feel
+                amp = self.visual_data[i] * (height * 0.35)
+                
+                # Add beat reactive amplitude
+                if self._beat_flash > 0:
+                    amp *= (1 + self._beat_flash / 500)
+                
+                # Smooth curves using quadratic Bezier
+                if i > 0:
+                    prev_x = (i - 1) * sample_width
+                    ctrl_x = (prev_x + x) / 2
+                    path_top.quadTo(ctrl_x, mid_y - amp * 0.9, x, mid_y - amp)
+                    path_bottom.quadTo(ctrl_x, mid_y + amp * 0.9, x, mid_y + amp)
+                else:
+                    path_top.lineTo(x, mid_y - amp)
+                    path_bottom.lineTo(x, mid_y + amp)
+            
+            # Close paths
+            path_top.lineTo(width, mid_y)
+            path_bottom.lineTo(width, mid_y)
+            
+            # Draw waveform with gradient fill
+            waveform_gradient = QLinearGradient(0, 0, 0, height)
+            waveform_gradient.setColorAt(0, self.waveform_color_top)
+            waveform_gradient.setColorAt(0.5, self.waveform_color_mid)
+            waveform_gradient.setColorAt(1, self.waveform_color_bottom)
+            
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(waveform_gradient))
+            painter.setOpacity(0.7)
+            painter.drawPath(path_top)
+            painter.drawPath(path_bottom)
+            painter.setOpacity(1.0)
+            
+            # Draw waveform outline with glow
+            painter.setPen(QPen(self.waveform_color_mid, 2))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(path_top)
+            painter.drawPath(path_bottom)
+            
+            # Add center line
+            center_gradient = QLinearGradient(0, mid_y, width, mid_y)
+            center_gradient.setColorAt(0, QColor(255, 255, 255, 30))
+            center_gradient.setColorAt(0.5, QColor(255, 255, 255, 60))
+            center_gradient.setColorAt(1, QColor(255, 255, 255, 30))
+            painter.setPen(QPen(QBrush(center_gradient), 1))
+            painter.drawLine(0, mid_y, width, mid_y)
+        
+        # Draw beat markers with glow effects
+        for beat_time in self.beats:
+            if beat_time <= self.duration:
+                x = int(beat_time * width / self.duration)
+                is_downbeat = beat_time in self.downbeats
+                
+                if is_downbeat:
+                    # Downbeat with glow effect
+                    glow_radius = 20 + self._beat_flash / 10
+                    glow = QRadialGradient(x, height/2, glow_radius)
+                    glow.setColorAt(0, QColor(255, 200, 0, 100 + self._beat_flash))
+                    glow.setColorAt(0.5, QColor(255, 200, 0, 50))
+                    glow.setColorAt(1, QColor(255, 200, 0, 0))
+                    
+                    painter.setPen(Qt.NoPen)
+                    painter.setBrush(QBrush(glow))
+                    painter.drawEllipse(QPointF(x, height/2), glow_radius, height/2)
+                    
+                    # Draw line
+                    painter.setPen(QPen(self.downbeat_color, 2))
+                    painter.setBrush(Qt.NoBrush)
+                    painter.drawLine(x, 0, x, height)
+                    
+                    # Draw beat number
+                    if self.zoom_level > 0.5:  # Only show numbers when zoomed enough
+                        beat_num = self.downbeats.index(beat_time) + 1
+                        painter.setPen(QPen(QColor(255, 255, 255, 200), 1))
+                        painter.setFont(QFont("Arial", 8, QFont.Bold))
+                        painter.drawText(x - 10, height - 5, 20, 20, Qt.AlignCenter, str(beat_num))
+                else:
+                    # Regular beat with subtle line
+                    painter.setPen(QPen(self.beat_color, 1, Qt.DotLine))
+                    painter.drawLine(x, height * 0.3, x, height * 0.7)
+        
+        # Draw playhead with enhanced visibility
+        if self.current_position > 0 and self.current_position <= self.duration:
+            x = int(self.current_position * width / self.duration)
+            
+            # Glow effect
+            glow_gradient = QLinearGradient(x - 30, 0, x + 30, 0)
+            glow_gradient.setColorAt(0, QColor(255, 255, 255, 0))
+            glow_gradient.setColorAt(0.4, QColor(255, 255, 255, 30))
+            glow_gradient.setColorAt(0.5, QColor(255, 255, 255, 60))
+            glow_gradient.setColorAt(0.6, QColor(255, 255, 255, 30))
+            glow_gradient.setColorAt(1, QColor(255, 255, 255, 0))
+            
+            painter.fillRect(x - 30, 0, 60, height, glow_gradient)
+            
+            # Playhead line
+            painter.setPen(QPen(QColor(255, 255, 255), 3))
+            painter.drawLine(x, 0, x, height)
+            
+            # Triangle indicator at top
+            triangle = QPainterPath()
+            triangle.moveTo(x - 8, 0)
+            triangle.lineTo(x + 8, 0)
+            triangle.lineTo(x, 12)
+            triangle.closeSubpath()
+            painter.fillPath(triangle, QColor(255, 255, 255))
+        
+        # Draw hover indicator with time
+        if self.hover_position >= 0:
+            x = self.hover_position
+            
+            # Vertical line
+            painter.setPen(QPen(QColor(255, 255, 255, 80), 1))
+            painter.drawLine(x, 0, x, height)
+            
+            # Time tooltip
+            time = self.hover_position * self.duration / width if self.duration > 0 else 0
+            time_str = f"{int(time // 60)}:{int(time % 60):02d}.{int((time % 1) * 10)}"
+            
+            # Tooltip background
+            font = QFont("Arial", 10)
+            fm = QFontMetrics(font)
+            text_rect = fm.boundingRect(time_str)
+            
+            tooltip_rect = QRect(x - text_rect.width()//2 - 8, 25, 
+                                text_rect.width() + 16, text_rect.height() + 8)
+            
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(QColor(30, 30, 40, 200)))
+            painter.drawRoundedRect(tooltip_rect, 4, 4)
+            
+            painter.setPen(QPen(QColor(255, 255, 255), 1))
+            painter.setFont(font)
+            painter.drawText(tooltip_rect, Qt.AlignCenter, time_str)
+        
+        # Draw info overlay
+        if self.beats:
+            # Bottom left info
+            info_text = f"{len(self.beats)} beats • {len(self.sections)} sections"
+            if self.downbeats:
+                info_text += f" • {len(self.downbeats)} bars"
+            
+            # Info background
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(QColor(0, 0, 0, 150)))
+            painter.drawRoundedRect(5, height - 30, 200, 25, 3, 3)
+            
+            painter.setPen(QPen(QColor(255, 255, 255, 200), 1))
+            painter.setFont(QFont("Arial", 9))
+            painter.drawText(10, height - 10, info_text)
+        
+        # Draw border with gradient
+        border_gradient = QLinearGradient(0, 0, width, height)
+        border_gradient.setColorAt(0, QColor(0, 200, 255, 100))
+        border_gradient.setColorAt(0.5, QColor(147, 0, 211, 100))
+        border_gradient.setColorAt(1, QColor(0, 200, 255, 100))
+        painter.setPen(QPen(QBrush(border_gradient), 2))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(1, 1, width-2, height-2)
+    
+    def mouseMoveEvent(self, event):
+        self.hover_position = event.x()
+        self.update()
+    
+    def leaveEvent(self, event):
+        self.hover_position = -1
+        self.update()
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton and self.duration > 0:
+            position = event.x() * self.duration / self.width()
+            self.current_position = position
+            self.position_changed.emit(position)
+            self.update()
+    
+    def wheelEvent(self, event):
+        """Zoom with mouse wheel"""
+        zoom_delta = event.angleDelta().y() / 1200.0
+        self.zoom_level = max(0.5, min(3.0, self.zoom_level + zoom_delta))
+        self.cache_dirty = True
+        self.update()
+    
+    def clear_data(self):
+        self.audio_data = None
+        self.visual_data = None
+        self.beats = []
+        self.downbeats = []
+        self.sections = []
+        self.duration = 0
+        self.glow_timer.stop()
+        self.cache_dirty = True
+        self.update()
+
+
+class WaveformTestWidget(QWidget):
+    """Test widget with enhanced visuals"""
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Enhanced Waveform Visualization")
+        self.setGeometry(100, 100, 1000, 250)
+        self.setStyleSheet("background-color: #0a0a0f;")
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Add waveform
+        self.waveform = WaveformWidget()
+        layout.addWidget(self.waveform)
+        
+        # Generate test data
+        self.generate_test_data()
+    
+    def generate_test_data(self):
+        """Generate realistic test audio data"""
+        duration = 30
+        sample_rate = 44100
+        samples = duration * sample_rate
+        
+        # Create more realistic audio with envelope
+        t = np.linspace(0, duration, samples)
+        
+        # Multiple frequencies for richness
+        audio_data = np.sin(2 * np.pi * 440 * t) * 0.3  # A4
+        audio_data += np.sin(2 * np.pi * 554.37 * t) * 0.2  # C#5
+        audio_data += np.sin(2 * np.pi * 659.25 * t) * 0.1  # E5
+        
+        # Add envelope
+        envelope = np.exp(-t/10) * np.sin(t/2) ** 2
+        audio_data *= envelope
+        
+        # Add some noise
+        audio_data += np.random.normal(0, 0.02, samples)
+        
+        self.waveform.set_audio_data(audio_data, sample_rate)
+        
+        # Enhanced beat data
+        class FakeAnalysis:
+            def __init__(self):
+                self.tempo = 128
+                self.duration = duration
+                self.beats = []
+                self.sections = [
+                    {'start': 0, 'end': 4, 'type': 'intro'},
+                    {'start': 4, 'end': 12, 'type': 'build'},
+                    {'start': 12, 'end': 20, 'type': 'drop'},
+                    {'start': 20, 'end': 28, 'type': 'verse'},
+                    {'start': 28, 'end': 30, 'type': 'outro'}
+                ]
+                
+                beat_interval = 60 / self.tempo
+                for i in range(int(duration / beat_interval)):
+                    beat = type('Beat', (), {
+                        'time': i * beat_interval,
+                        'is_downbeat': i % 4 == 0
+                    })()
+                    self.beats.append(beat)
+        
+        analysis = FakeAnalysis()
+        self.waveform.set_beat_data(analysis)
+
+
+if __name__ == "__main__":
+    import sys
+    from PySide6.QtWidgets import QApplication
+    
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    
+    test = WaveformTestWidget()
+    test.show()
+    
+    sys.exit(app.exec_())

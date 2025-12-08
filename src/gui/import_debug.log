@@ -1,0 +1,16 @@
+=== Starting effects import ===
+sys.path: ['C:\\BACKUP-LAUNCH-VERSION\\src\\gui', 'C:\\BACKUP-LAUNCH-VERSION\\src', 'C:\\BACKUP-LAUNCH-VERSION', 'C:\\BACKUP-LAUNCH-VERSION\\src\\gui\\..', 'src/gui', 'C:\\BACKUP-LAUNCH-VERSION\\src\\gui', 'C:\\Users\\pacho\\anaconda3\\python312.zip', 'C:\\Users\\pacho\\anaconda3\\DLLs', 'C:\\Users\\pacho\\anaconda3\\Lib', 'C:\\Users\\pacho\\anaconda3', 'C:\\Users\\pacho\\anaconda3\\Lib\\site-packages', 'C:\\Users\\pacho\\anaconda3\\Lib\\site-packages\\win32', 'C:\\Users\\pacho\\anaconda3\\Lib\\site-packages\\win32\\lib', 'C:\\Users\\pacho\\anaconda3\\Lib\\site-packages\\Pythonwin']
+Current file: C:\BACKUP-LAUNCH-VERSION\src\gui\..\core\video_renderer.py
+Project root: C:\BACKUP-LAUNCH-VERSION\src\gui
+
+Importing ColorGradingEngine...
+? ColorGradingEngine imported successfully
+Importing BeatReactiveEffects...
+? BeatReactiveEffects imported successfully
+Importing TransitionEffects...
+? SpeedEngine imported successfully
+? TransitionEffects imported successfully
+Importing CameraMotion...
+? CameraMotion imported successfully
+
+=== ALL IMPORTS SUCCESSFUL ===

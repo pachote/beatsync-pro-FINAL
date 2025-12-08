@@ -1,0 +1,150 @@
+﻿"""
+BeatSync PRO - Lip Sync Integration Layer
+Connects face detection, vocal separation, and lip sync API
+"""
+
+import os
+import logging
+from pathlib import Path
+from typing import Optional, Dict, List
+
+logger = logging.getLogger(__name__)
+
+
+class LipSyncIntegration:
+    """Integrates lip sync into video rendering pipeline"""
+    
+    def __init__(self, quality: str = 'local'):
+        self.quality = quality
+        self.api = None
+        self.face_detector = None
+        self.vocal_processor = None
+        
+        if quality != 'local':
+            self._init_components()
+    
+    def _init_components(self):
+        """Initialize lip sync components"""
+        try:
+            from core.lipsync_api import LipSyncAPI
+            self.api = LipSyncAPI()
+            logger.info("LipSyncAPI initialized")
+        except Exception as e:
+            logger.warning(f"Could not init LipSyncAPI: {e}")
+        
+        try:
+            from core.face_detector import FaceDetector
+            self.face_detector = FaceDetector()
+            logger.info("FaceDetector initialized")
+        except Exception as e:
+            logger.warning(f"Could not init FaceDetector: {e}")
+        
+        try:
+            from core.vocal_processor import VocalProcessor
+            self.vocal_processor = VocalProcessor()
+            logger.info("VocalProcessor initialized")
+        except Exception as e:
+            logger.warning(f"Could not init VocalProcessor: {e}")
+    
+    def should_process(self) -> bool:
+        """Check if lip sync should be processed"""
+        return self.quality in ('standard', 'pro') and self.api is not None
+    
+    def detect_face_clips(self, clips_data: List[Dict]) -> List[Dict]:
+        """Identify clips with faces"""
+        if not self.face_detector:
+            logger.warning("Face detector not available")
+            return []
+        
+        face_clips = []
+        
+        for clip in clips_data:
+            clip_path = clip.get('path', '')
+            if not clip_path or not os.path.exists(clip_path):
+                continue
+            
+            try:
+                result = self.face_detector.detect_faces_in_video(clip_path)
+                if result.get('has_face', False):
+                    clip['face_data'] = result
+                    face_clips.append(clip)
+            except Exception as e:
+                logger.warning(f"Face detection failed for {clip_path}: {e}")
+        
+        logger.info(f"Found {len(face_clips)} clips with faces")
+        return face_clips
+    
+    def extract_vocals(self, music_path: str) -> Optional[str]:
+        """Extract vocals from music"""
+        if not self.vocal_processor:
+            logger.warning("Vocal processor not available")
+            return None
+        
+        try:
+            result = self.vocal_processor.process_audio(music_path)
+            vocals_path = result.get('vocals_path')
+            
+            if vocals_path and os.path.exists(vocals_path):
+                logger.info(f"Extracted vocals to: {vocals_path}")
+                return vocals_path
+        except Exception as e:
+            logger.warning(f"Vocal extraction failed: {e}")
+        
+        return None
+    
+    def process_clip(self, clip_path: str, vocals_path: str, progress_callback=None) -> Optional[str]:
+        """Process single clip with lip sync"""
+        if not self.api:
+            return clip_path
+        
+        try:
+            result = self.api.sync_video(
+                video_path=clip_path,
+                audio_path=vocals_path,
+                quality=self.quality,
+                progress_callback=progress_callback
+            )
+            
+            if result.success and result.output_path:
+                logger.info(f"Lip sync complete: {clip_path}")
+                return result.output_path
+            else:
+                logger.warning(f"Lip sync failed: {result.error}")
+                return clip_path
+        except Exception as e:
+            logger.warning(f"Lip sync error: {e}")
+            return clip_path
+    
+    def process_clips_batch(
+        self,
+        clips: List[Dict],
+        vocals_path: str,
+        max_clips: int = 10,
+        progress_callback=None
+    ) -> Dict[str, str]:
+        """Process multiple clips with lip sync"""
+        path_mapping = {}
+        
+        # Sort by face confidence
+        scored = []
+        for clip in clips:
+            face_data = clip.get('face_data', {})
+            score = face_data.get('confidence', 0) * 100
+            scored.append((score, clip))
+        
+        scored.sort(reverse=True, key=lambda x: x[0])
+        
+        # Process top clips
+        to_process = [c[1] for c in scored[:max_clips]]
+        
+        for i, clip in enumerate(to_process):
+            clip_path = clip['path']
+            
+            if progress_callback:
+                pct = int((i / len(to_process)) * 100)
+                progress_callback(pct, f"Lip sync {i+1}/{len(to_process)}")
+            
+            result_path = self.process_clip(clip_path, vocals_path)
+            path_mapping[clip_path] = result_path
+        
+        return path_mapping
